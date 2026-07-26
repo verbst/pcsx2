@@ -259,6 +259,9 @@
     <Filter Include="System\Ps2\USB\usb-lightgun">
       <UniqueIdentifier>{b8542664-8208-48ad-bd47-425a316f293c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Misc\GroovyMiSTer">
+      <UniqueIdentifier>{3b510648-6225-485d-9958-915ebd980f7f}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Misc\Input">
       <UniqueIdentifier>{aa9a3402-0b59-4e60-8d53-b77f509bf081}</UniqueIdentifier>
     </Filter>
@@ -1313,6 +1316,18 @@
     <ClCompile Include="Input\SDLInputSource.cpp">
       <Filter>Misc\Input</Filter>
     </ClCompile>
+    <ClCompile Include="GroovyMiSTer\GroovyMiSTerAudioTap.cpp">
+      <Filter>Misc\GroovyMiSTer</Filter>
+    </ClCompile>
+    <ClCompile Include="GroovyMiSTer\GroovyMiSTerOutput.cpp">
+      <Filter>Misc\GroovyMiSTer</Filter>
+    </ClCompile>
+    <ClCompile Include="GroovyMiSTer\GroovyMiSTerPixels.cpp">
+      <Filter>Misc\GroovyMiSTer</Filter>
+    </ClCompile>
+    <ClCompile Include="Input\GroovyMiSTerInputSource.cpp">
+      <Filter>Misc\Input</Filter>
+    </ClCompile>
     <ClCompile Include="Input\InputManager.cpp">
       <Filter>Misc\Input</Filter>
     </ClCompile>
@@ -2270,6 +2285,24 @@
     </ClInclude>
     <ClInclude Include="Achievements.h">
       <Filter>Misc</Filter>
+    </ClInclude>
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTer.h">
+      <Filter>Misc\GroovyMiSTer</Filter>
+    </ClInclude>
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTerAudioTap.h">
+      <Filter>Misc\GroovyMiSTer</Filter>
+    </ClInclude>
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTerModeline.h">
+      <Filter>Misc\GroovyMiSTer</Filter>
+    </ClInclude>
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTerOutput.h">
+      <Filter>Misc\GroovyMiSTer</Filter>
+    </ClInclude>
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTerPixels.h">
+      <Filter>Misc\GroovyMiSTer</Filter>
+    </ClInclude>
+    <ClInclude Include="Input\GroovyMiSTerInputSource.h">
+      <Filter>Misc\Input</Filter>
     </ClInclude>
     <ClInclude Include="Input\InputManager.h">
       <Filter>Misc\Input</Filter>

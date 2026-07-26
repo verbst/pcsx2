@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(SolutionDir)common\vsprops\BaseProjectConfig.props" />
+  <Import Project="$(SolutionDir)common\vsprops\WinSDK.props" />
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{55EDD01E-93F2-47D7-B15B-87FC01775601}</ProjectGuid>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset Condition="!$(Configuration.Contains(Clang))">$(DefaultPlatformToolset)</PlatformToolset>
+    <PlatformToolset Condition="$(Configuration.Contains(Clang))">ClangCL</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization Condition="$(Configuration.Contains(Release))">true</WholeProgramOptimization>
+    <UseDebugLibraries Condition="$(Configuration.Contains(Debug))">true</UseDebugLibraries>
+    <UseDebugLibraries Condition="!$(Configuration.Contains(Debug))">false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="..\DefaultProjectRootDir.props" />
+    <Import Project="..\3rdparty.props" />
+    <Import Condition="$(Configuration.Contains(Debug))" Project="..\..\common\vsprops\CodeGen_Debug.props" />
+    <Import Condition="$(Configuration.Contains(Devel))" Project="..\..\common\vsprops\CodeGen_Devel.props" />
+    <Import Condition="$(Configuration.Contains(Release))" Project="..\..\common\vsprops\CodeGen_Release.props" />
+    <Import Condition="!$(Configuration.Contains(Release))" Project="..\..\common\vsprops\IncrementalLinking.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <ItemGroup>
+    <ClInclude Include="custom_video.h" />
+    <ClInclude Include="display.h" />
+    <ClInclude Include="edid.h" />
+    <ClInclude Include="font.h" />
+    <ClInclude Include="log.h" />
+    <ClInclude Include="modeline.h" />
+    <ClInclude Include="monitor.h" />
+    <ClInclude Include="switchres.h" />
+    <ClInclude Include="switchres_defines.h" />
+    <ClInclude Include="switchres_wrapper.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="custom_video.cpp" />
+    <ClCompile Include="display.cpp" />
+    <ClCompile Include="edid.cpp" />
+    <ClCompile Include="log.cpp" />
+    <ClCompile Include="modeline.cpp" />
+    <ClCompile Include="monitor.cpp" />
+    <ClCompile Include="switchres.cpp" />
+    <ClCompile Include="switchres_wrapper.cpp" />
+  </ItemGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <!-- SR_CALC_ONLY: modeline calculator only. Drops every real host-display
+           backend (windows/linux/sdl2 + X11/DRM/ADL/ATI custom_video) and keeps
+           only the "dummy" backend. We never switch the host's display; the
+           computed modeline is sent to the MiSTer over UDP.
+           SR_WIN32_STATIC: non-dllexport wrapper symbols for static linking. -->
+      <PreprocessorDefinitions>SR_CALC_ONLY;SR_WIN32_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

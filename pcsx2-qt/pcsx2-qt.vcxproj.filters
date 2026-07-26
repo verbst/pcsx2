@@ -119,6 +119,9 @@
     <ClCompile Include="Settings\AudioSettingsWidget.cpp">
       <Filter>Settings</Filter>
     </ClCompile>
+    <ClCompile Include="Settings\GroovyMiSTerSettingsWidget.cpp">
+      <Filter>Settings</Filter>
+    </ClCompile>
     <ClCompile Include="Settings\MemoryCardCreateDialog.cpp">
       <Filter>Settings</Filter>
     </ClCompile>
@@ -379,6 +382,9 @@
     <QtMoc Include="Settings\AudioSettingsWidget.h">
       <Filter>Settings</Filter>
     </QtMoc>
+    <QtMoc Include="Settings\GroovyMiSTerSettingsWidget.h">
+      <Filter>Settings</Filter>
+    </QtMoc>
     <QtMoc Include="Settings\MemoryCardCreateDialog.h">
       <Filter>Settings</Filter>
     </QtMoc>
@@ -591,6 +597,9 @@
       <Filter>Settings</Filter>
     </QtUi>
     <QtUi Include="Settings\AudioSettingsWidget.ui">
+      <Filter>Settings</Filter>
+    </QtUi>
+    <QtUi Include="Settings\GroovyMiSTerSettingsWidget.ui">
       <Filter>Settings</Filter>
     </QtUi>
     <QtUi Include="Settings\AudioStretchSettingsDialog.ui">

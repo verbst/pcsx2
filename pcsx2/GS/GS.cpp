@@ -6,6 +6,7 @@
 #include "ImGui/FullscreenUI.h"
 #include "ImGui/ImGuiManager.h"
 #include "GS/GS.h"
+#include "GroovyMiSTer/GroovyMiSTer.h"
 #include "GS/GSCapture.h"
 #include "GS/GSExtra.h"
 #include "GS/GSGL.h"
@@ -365,11 +366,17 @@ bool GSopen(const Pcsx2Config::GSOptions& config, GSRendererType renderer, u8* b
 		return false;
 	}
 
+	// GroovyMiSTer: needs a live GS device for its readback textures, so it comes up here
+	// and goes down in GSclose(). A no-op unless the user enabled it.
+	GroovyMiSTer::Open();
+
 	return true;
 }
 
 void GSclose()
 {
+	GroovyMiSTer::Close();
+
 	if (GSCapture::IsCapturing())
 		GSCapture::EndCapture();
 

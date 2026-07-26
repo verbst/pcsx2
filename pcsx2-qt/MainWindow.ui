@@ -101,6 +101,7 @@
     <addaction name="actionGraphicsSettings"/>
     <addaction name="actionOSDSettings"/>
     <addaction name="actionAudioSettings"/>
+    <addaction name="actionMiSTerSettings"/>
     <addaction name="actionMemoryCardSettings"/>
     <addaction name="actionDEV9Settings"/>
     <addaction name="actionFolderSettings"/>
@@ -600,6 +601,14 @@
    </property>
    <property name="text">
     <string>&amp;On-Screen Display</string>
+   </property>
+  </action>
+  <action name="actionMiSTerSettings">
+   <property name="icon">
+    <iconset theme="tv-2-line"/>
+   </property>
+   <property name="text">
+    <string>Mi&amp;STer</string>
    </property>
   </action>
   <action name="actionGameListSettings">

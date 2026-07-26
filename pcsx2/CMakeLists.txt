@@ -854,11 +854,13 @@ set(pcsx2ImGuiHeaders
 )
 
 set(pcsx2InputSources
+	Input/GroovyMiSTerInputSource.cpp
 	Input/InputManager.cpp
 	Input/InputSource.cpp
 	Input/SDLInputSource.cpp
 )
 set(pcsx2InputHeaders
+	Input/GroovyMiSTerInputSource.h
 	Input/InputManager.h
 	Input/InputSource.h
 	Input/SDLInputSource.h
@@ -1093,8 +1095,25 @@ else()
 	target_sources(PCSX2 PRIVATE ${pcsx2LTOSources})
 endif()
 
+# GroovyMiSTer - low-latency streaming output to a MiSTer FPGA
+set(pcsx2GroovyMiSTerSources
+	GroovyMiSTer/GroovyMiSTerAudioTap.cpp
+	GroovyMiSTer/GroovyMiSTerOutput.cpp
+	GroovyMiSTer/GroovyMiSTerPixels.cpp
+)
+
+set(pcsx2GroovyMiSTerHeaders
+	GroovyMiSTer/GroovyMiSTer.h
+	GroovyMiSTer/GroovyMiSTerAudioTap.h
+	GroovyMiSTer/GroovyMiSTerModeline.h
+	GroovyMiSTer/GroovyMiSTerOutput.h
+	GroovyMiSTer/GroovyMiSTerPixels.h
+)
+
 # common Sources
 target_sources(PCSX2 PRIVATE
+	${pcsx2GroovyMiSTerSources}
+	${pcsx2GroovyMiSTerHeaders}
 	${pcsx2CDVDSources}
 	${pcsx2CDVDHeaders}
 	${pcsx2DEV9Sources}
@@ -1158,6 +1177,8 @@ target_link_libraries(PCSX2_FLAGS INTERFACE
 	discord-rpc
 	simpleini
 	freesurround
+	groovymister
+	switchres
 	Freetype::Freetype
 	SDL3::SDL3
 	ZLIB::ZLIB

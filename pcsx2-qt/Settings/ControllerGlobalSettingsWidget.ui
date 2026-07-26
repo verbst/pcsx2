@@ -276,6 +276,35 @@
      </layout>
     </widget>
    </item>
+   <item row="2" column="0">
+    <widget class="QGroupBox" name="misterGroup">
+     <property name="title">
+      <string>MiSTer Source</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_7">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_mister">
+        <property name="text">
+         <string>The MiSTer source exposes controllers attached to a MiSTer FPGA (streamed over the network) as two virtual pads. The pads can be mapped at any time, including with no game running; button presses only arrive while a game is streaming to the MiSTer.</string>
+        </property>
+        <property name="textInteractionFlags">
+         <set>Qt::TextBrowserInteraction</set>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QCheckBox" name="enableMiSTerSource">
+        <property name="text">
+         <string>Enable MiSTer Input Source</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
    <item row="0" column="1" rowspan="8">
     <widget class="QGroupBox" name="groupBox_3">
      <property name="title">

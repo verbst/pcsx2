@@ -4,6 +4,7 @@
 #include "ImGui/FullscreenUI.h"
 #include "ImGui/ImGuiManager.h"
 #include "GS/Renderers/Common/GSRenderer.h"
+#include "GroovyMiSTer/GroovyMiSTer.h"
 #include "GS/GSCapture.h"
 #include "GS/GSDump.h"
 #include "GS/GSGL.h"
@@ -634,6 +635,17 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 
 	m_last_draw_n = s_n;
 	m_last_transfer_n = s_transfer_n;
+
+	// GroovyMiSTer: hand the finished frame to the MiSTer *before* we present it, so our
+	// readback and network send never queue up behind the host window's presentation.
+	// This also sits above the frame-skip branch below on purpose: those skips only skip
+	// *presentation*, and Merge() has already run, so the frame is still good - the CRT
+	// should keep receiving frames even when the host window does not.
+	if (GroovyMiSTer::IsActive() && !blank_frame)
+	{
+		if (GSTexture* current = g_gs_device->GetCurrent())
+			GroovyMiSTer::OnVSync(current, CalculateDrawSrcRect(current, m_real_size), field);
+	}
 
 	// Skip presentation when running uncapped while vsync is on.
 	if (skip_frame || g_gs_device->ShouldSkipPresentingFrame())

@@ -33,6 +33,7 @@ class GamePatchSettingsWidget;
 class GraphicsSettingsWidget;
 class OSDSettingsWidget;
 class AudioSettingsWidget;
+class GroovyMiSTerSettingsWidget;
 class MemoryCardSettingsWidget;
 class FolderSettingsWidget;
 class DEV9SettingsWidget;
@@ -118,7 +119,9 @@ protected:
 private:
 	enum : u32
 	{
-		MAX_SETTINGS_WIDGETS = 14
+		// Bound for m_category_help_text, which addWidget() indexes *unchecked*. Adding a page
+		// past this bound silently writes out of bounds, so keep headroom here.
+		MAX_SETTINGS_WIDGETS = 16
 	};
 
 	void setupUi(const GameList::Entry* game);
@@ -142,6 +145,7 @@ private:
 	GraphicsSettingsWidget* m_graphics_settings = nullptr;
 	OSDSettingsWidget* m_osd_settings = nullptr;
 	AudioSettingsWidget* m_audio_settings = nullptr;
+	GroovyMiSTerSettingsWidget* m_groovymister_settings = nullptr;
 	MemoryCardSettingsWidget* m_memory_card_settings = nullptr;
 	FolderSettingsWidget* m_folder_settings = nullptr;
 	DEV9SettingsWidget* m_dev9_settings = nullptr;

@@ -515,6 +515,9 @@ void MainWindow::connectSignals()
 	connect(m_ui.actionGraphicsSettings, &QAction::triggered, [this]() { doSettings("Graphics"); });
 	connect(m_ui.actionOSDSettings, &QAction::triggered, [this]() { doSettings("On-Screen Display"); });
 	connect(m_ui.actionAudioSettings, &QAction::triggered, [this]() { doSettings("Audio"); });
+	// Must match the untranslated tr() title given to addWidget() in SettingsWindow::setupUi -
+	// setCategory() re-translates this string and matches it against the category list rows.
+	connect(m_ui.actionMiSTerSettings, &QAction::triggered, [this]() { doSettings("MiSTer"); });
 	connect(m_ui.actionMemoryCardSettings, &QAction::triggered, [this]() { doSettings("Memory Cards"); });
 	connect(m_ui.actionDEV9Settings, &QAction::triggered, [this]() { doSettings("Network & HDD"); });
 	connect(m_ui.actionFolderSettings, &QAction::triggered, [this]() { doSettings("Folders"); });

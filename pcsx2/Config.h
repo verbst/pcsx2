@@ -592,6 +592,91 @@ struct TraceLogFilters
 };
 
 // --------------------------------------------------------------------------------------
+//  GroovyMiSTer streaming output
+// --------------------------------------------------------------------------------------
+// Streams the emulated PS2 frame/audio to a MiSTer FPGA over UDP, and reads MiSTer-side
+// controllers back. See pcsx2/GroovyMiSTer/ and 3rdparty/groovymister/PROVENANCE.md.
+
+// Wire-side codec. The values are NOT arbitrary: they are the Groovy protocol's
+// Lz4FramesCode, which rides CMD_INIT.
+enum class GroovyMiSTerCodec : u8
+{
+	Raw = 0, // uncompressed
+	LZ4 = 1,
+	LZ4HC = 3,
+	// Near-lossless codec. The entropy front-end (Pack) and quantization (NearLevel)
+	// are separate knobs below - they are not part of this codec id.
+	NLC = 7,
+};
+
+// NLC entropy front-end (CMD_INIT byte[1] bit 7). Only meaningful when Codec == NLC.
+enum class GroovyMiSTerNlcPack : u8
+{
+	// Block-adaptive bit widths. Works on any NLC-capable core; better on flat/2D
+	// content (Rice has a 1-bit-per-sample floor).
+	Tiled = 1,
+	// Golomb-Rice entropy coding. Better on 3D content, and what brings heavy scenes
+	// under the core's ~38 MB/s ingest ceiling.
+	// WARNING: REQUIRES a core with the Rice decoder (rbf_rice_r3 kit or newer).
+	// There is no negotiation - an older core ignores bit 7 and misparses Rice as
+	// Tiled, producing a garbage picture.
+	Rice = 2,
+};
+
+// Maps directly onto the Groovy modeline's interlace parameter.
+enum class GroovyMiSTerInterlace : u8
+{
+	Progressive = 0, // progressive modeline (e.g. 31kHz VGA)
+	Field = 1, // true interlaced: one field per blit (half the bytes, half the latency)
+	ProgressiveFB = 2, // progressive framebuffer over an interlaced modeline
+};
+
+// Wire pixel format (Groovy RGBModeCode).
+//
+// NOTE ON BYTE ORDER: the MiSTer's wire layout is *not* what the names suggest.
+// Confirmed against the FPGA RTL (Groovy.sv decode_pixel), where a pixel is
+// unpacked as {r,g,b} <= word64[0 +: 24] - a Verilog concat, so blue lands in the
+// least-significant byte, and DDR is little-endian:
+//   RGB888   -> bytes are B, G, R
+//   RGBA8888 -> bytes are B, G, R, A   (the 4th byte is ignored by the core)
+//   RGB565   -> a little-endian u16, (r << 11) | (g << 5) | b
+// PCSX2 reads back RGBA8 (byte 0 = red), so EVERY mode needs a channel swap.
+// None of them is a memcpy. See GroovyMiSTerOutput.cpp PackFrame().
+enum class GroovyMiSTerRgbMode : u8
+{
+	RGB888 = 0, // 3 B/px
+	RGBA8888 = 1, // 4 B/px
+	RGB565 = 2, // 2 B/px - half the bytes of 888, mild banding
+};
+
+// Who owns the frame clock.
+enum class GroovyMiSTerPacing : u8
+{
+	// PCSX2's frame limiter runs as normal; frames are raster-chased via vCountSync.
+	// A network hiccup can never stall emulation.
+	Pcsx2Master,
+	// The CRT raster is the clock: gmw_waitSync() paces the sender, backpressure
+	// propagates through the ring -> MTGS -> EE. Lowest, most deterministic latency.
+	MisterMaster,
+};
+
+// GPU readback strategy.
+enum class GroovyMiSTerReadback : u8
+{
+	// Flush + map in-frame. Zero added frames. Briefly blocks the GS thread, which
+	// the MTGS ring decouples from emulation.
+	Sync,
+	// Copy this frame, map the next. Costs exactly one frame; never blocks.
+	Deferred1,
+};
+
+enum class GroovyMiSTerHostDisplay : u8
+{
+	Parallel, // host window keeps presenting alongside the MiSTer
+	Headless, // skip host presentation; the MiSTer is the only output
+};
+
+// --------------------------------------------------------------------------------------
 //  Pcsx2Config class
 // --------------------------------------------------------------------------------------
 // This is intended to be a public class library between the core emulator and GUI only.
@@ -1340,6 +1425,74 @@ struct Pcsx2Config
 		bool operator!=(const SavestateOptions& right) const;
 	};
 
+	struct GroovyMiSTerOptions
+	{
+		static constexpr u16 DEFAULT_MTU = 1500;
+		static constexpr u16 MINIMUM_MTU = 1024;
+		static constexpr u16 MAXIMUM_MTU = 9000;
+
+		// CRT safety cap. A modeline beyond this can overdrive - and physically damage -
+		// an arcade monitor. Enforced by default; see GroovyMiSTerModeline.h.
+		static constexpr u16 MAX_SAFE_V_ACTIVE = 576;
+		static constexpr u16 MAX_SAFE_H_ACTIVE = 1024;
+
+		// Hard ceiling on a single blit, in BYTES. Mirrors BUFFER_SIZE (720*576*3) in
+		// 3rdparty/groovymister/groovymister.h: the client's blit buffers are allocated at
+		// exactly that size (and RIO-registered on Windows), and nothing in the client
+		// clamps against it - it sizes its stream straight from the modeline we hand it.
+		//
+		// Note this is a byte budget, so it moves with RgbMode: the CRT cap above allows
+		// 1024x576, which is 1.7MB in RGB888, and RGBA8888 blows it at any 576-line mode.
+		// Unlike the CRT cap this is not a judgement call about displays - overrunning it
+		// corrupts the client's heap - so it is never user-disableable.
+		// MUST be re-checked against BUFFER_SIZE on every vendored-client re-sync.
+		static constexpr u32 MAX_BLIT_BYTES = 1245312;
+
+		BITFIELD32()
+		bool
+			Enabled : 1,
+			// Mirror SPU2's mixed output to the MiSTer.
+			TapAudio : 1,
+			// Refuse modelines outside the CRT-safe envelope. DEFAULT ON - only turn
+			// this off if you know your display tolerates the mode.
+			CrtSafetyCap : 1,
+			// Drop the GS upscale multiplier to 1x while streaming. Above 1x we pay a
+			// downscale pass and extra readback bytes for detail a CRT cannot show.
+			ForceNativeUpscale : 1;
+		BITFIELD_END
+
+		GroovyMiSTerCodec Codec = GroovyMiSTerCodec::NLC;
+		GroovyMiSTerNlcPack NlcPack = GroovyMiSTerNlcPack::Rice;
+		// NLC quantization, 0-3. 0 is lossless; 1 is the HW-validated default (NEAR 0/1/2
+		// were confirmed visually identical on a CRT, and 1 keeps heavy 3D scenes well
+		// under the core's ingest ceiling).
+		u8 NlcNearLevel = 1;
+
+		GroovyMiSTerInterlace Interlace = GroovyMiSTerInterlace::ProgressiveFB;
+		GroovyMiSTerRgbMode RgbMode = GroovyMiSTerRgbMode::RGB888;
+		GroovyMiSTerPacing Pacing = GroovyMiSTerPacing::Pcsx2Master;
+		GroovyMiSTerReadback Readback = GroovyMiSTerReadback::Sync;
+		GroovyMiSTerHostDisplay HostDisplay = GroovyMiSTerHostDisplay::Parallel;
+
+		u16 Mtu = DEFAULT_MTU;
+		u8 LogVerbosity = 0; // vendored client log verbosity, 0-2
+
+		std::string Host{"127.0.0.1"};
+		// switchres monitor preset - a compiled-in switchres monitor name (no ini needed).
+		// Defaults to the tri-sync arcade monitor (15/25/31 kHz), which covers every PS2
+		// output the CRT safety cap allows. Do NOT default this empty: switchres's own
+		// default is generic_15 (15 kHz only), which refuses all 31 kHz / 480p modes.
+		std::string MonitorPreset{"arcade_15_25_31"};
+		// Optional path to a switchres.ini (sr_load_ini) for power users.
+		std::string SwitchresIni;
+
+		GroovyMiSTerOptions();
+		void LoadSave(SettingsWrapper& wrap);
+
+		bool operator==(const GroovyMiSTerOptions& right) const;
+		bool operator!=(const GroovyMiSTerOptions& right) const;
+	};
+
 	// ------------------------------------------------------------------------
 
 	BITFIELD32()
@@ -1383,6 +1536,7 @@ struct Pcsx2Config
 	DEV9Options DEV9;
 	USBOptions USB;
 	PadOptions Pad;
+	GroovyMiSTerOptions GroovyMiSTer;
 
 	TraceLogFilters Trace;
 

@@ -159,6 +159,7 @@
     <ClCompile Include="Settings\InputBindingWidget.cpp" />
     <ClCompile Include="Settings\ControllerSettingsWindow.cpp" />
     <ClCompile Include="Settings\AudioSettingsWidget.cpp" />
+    <ClCompile Include="Settings\GroovyMiSTerSettingsWidget.cpp" />
     <ClCompile Include="Settings\MemoryCardConvertDialog.cpp" />
     <ClCompile Include="Settings\MemoryCardSettingsWidget.cpp" />
     <ClCompile Include="Settings\DEV9DnsHostDialog.cpp" />
@@ -204,6 +205,7 @@
     <QtMoc Include="Settings\InputBindingWidget.h" />
     <QtMoc Include="Settings\ControllerSettingsWindow.h" />
     <QtMoc Include="Settings\AudioSettingsWidget.h" />
+    <QtMoc Include="Settings\GroovyMiSTerSettingsWidget.h" />
     <QtMoc Include="Settings\MemoryCardConvertDialog.h" />
     <QtMoc Include="Settings\MemoryCardSettingsWidget.h" />
     <QtMoc Include="Settings\DEV9DnsHostDialog.h" />
@@ -319,6 +321,7 @@
     <QtUi Include="Settings\AdvancedSettingsWidget.ui" />
     <QtUi Include="Settings\AudioExpansionSettingsDialog.ui" />
     <QtUi Include="Settings\AudioSettingsWidget.ui" />
+    <QtUi Include="Settings\GroovyMiSTerSettingsWidget.ui" />
     <QtUi Include="Settings\AudioStretchSettingsDialog.ui" />
     <QtUi Include="Settings\BIOSSettingsWidget.ui" />
     <QtUi Include="Settings\ControllerBindingWidget.ui" />

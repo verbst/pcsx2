@@ -61,6 +61,12 @@ ControllerGlobalSettingsWidget::ControllerGlobalSettingsWidget(QWidget* parent, 
 	m_ui.dinputGroup = nullptr;
 #endif
 
+	// MiSTer is a network device (not platform-specific), so unlike XInput/DInput this is not
+	// gated on _WIN32. The key "MiSTer" must match InputManager::InputSourceToString(GroovyMiSTer),
+	// and the default must match InputManager::GetInputSourceDefaultEnabled(GroovyMiSTer) - on.
+	ControllerSettingWidgetBinder::BindWidgetToInputProfileBool(
+		sif, m_ui.enableMiSTerSource, "InputSources", "MiSTer", true);
+
 	if (dialog->isEditingProfile())
 	{
 		m_ui.useProfileHotkeyBindings->setChecked(m_dialog->getBoolValue("Pad", "UseProfileHotkeyBindings", false));

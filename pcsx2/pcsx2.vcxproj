@@ -58,6 +58,7 @@
       <AdditionalIncludeDirectories Condition="'$(Platform)'=='x64'">%(AdditionalIncludeDirectories);$(SolutionDir)3rdparty\zydis\include;$(SolutionDir)3rdparty\zydis\dependencies\zycore\include</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Platform)'=='ARM64'">%(AdditionalIncludeDirectories);$(SolutionDir)3rdparty\vixl\include</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)3rdparty\demangler\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)3rdparty\groovymister;$(SolutionDir)3rdparty\switchres</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)3rdparty\ccc\src</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>PrecompiledHeader.h</PrecompiledHeaderFile>
@@ -276,6 +277,10 @@
     </ClCompile>
     <ClCompile Include="Host.cpp" />
     <ClCompile Include="Input\DInputSource.cpp" />
+    <ClCompile Include="GroovyMiSTer\GroovyMiSTerAudioTap.cpp" />
+    <ClCompile Include="GroovyMiSTer\GroovyMiSTerOutput.cpp" />
+    <ClCompile Include="GroovyMiSTer\GroovyMiSTerPixels.cpp" />
+    <ClCompile Include="Input\GroovyMiSTerInputSource.cpp" />
     <ClCompile Include="Input\InputManager.cpp" />
     <ClCompile Include="Input\InputSource.cpp" />
     <ClCompile Include="Input\SDLInputSource.cpp" />
@@ -722,6 +727,12 @@
     </ClInclude>
     <ClInclude Include="Host.h" />
     <ClInclude Include="Input\DInputSource.h" />
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTer.h" />
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTerAudioTap.h" />
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTerModeline.h" />
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTerOutput.h" />
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTerPixels.h" />
+    <ClInclude Include="Input\GroovyMiSTerInputSource.h" />
     <ClInclude Include="Input\InputManager.h" />
     <ClInclude Include="Input\InputSource.h" />
     <ClInclude Include="Input\SDLInputSource.h" />
@@ -1024,6 +1035,13 @@
     </ProjectReference>
     <ProjectReference Include="..\3rdparty\zydis\zydis.vcxproj" Condition="'$(Platform)'=='x64'">
       <Project>{67d0160c-0fe4-44b9-ac2e-82bbcf4104df}</Project>
+    </ProjectReference>
+    <!-- GroovyMiSTer: keep additions contiguous at the end to minimise rebase conflicts. -->
+    <ProjectReference Include="..\3rdparty\groovymister\groovymister.vcxproj">
+      <Project>{a0c4fe1a-2003-426d-863f-4b5afa277897}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\3rdparty\switchres\switchres.vcxproj">
+      <Project>{55edd01e-93f2-47d7-b15b-87fc01775601}</Project>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
