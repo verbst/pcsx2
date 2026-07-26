@@ -1,0 +1,475 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>GroovyMiSTerSettingsWidget</class>
+ <widget class="QWidget" name="GroovyMiSTerSettingsWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>700</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QGroupBox" name="connectionGroup">
+     <property name="title">
+      <string>Connection</string>
+     </property>
+     <layout class="QGridLayout" name="connectionLayout">
+      <item row="0" column="0" colspan="2">
+       <widget class="QCheckBox" name="enabled">
+        <property name="text">
+         <string>Enable MiSTer Output</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelHost">
+        <property name="text">
+         <string>MiSTer Host:</string>
+        </property>
+        <property name="buddy">
+         <cstring>host</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="host">
+        <property name="placeholderText">
+         <string>192.168.1.100</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="labelMtu">
+        <property name="text">
+         <string>MTU:</string>
+        </property>
+        <property name="buddy">
+         <cstring>mtu</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QSpinBox" name="mtu">
+        <property name="minimum">
+         <number>1024</number>
+        </property>
+        <property name="maximum">
+         <number>9000</number>
+        </property>
+        <property name="singleStep">
+         <number>100</number>
+        </property>
+        <property name="value">
+         <number>1500</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="displayGroup">
+     <property name="title">
+      <string>Display / CRT</string>
+     </property>
+     <layout class="QGridLayout" name="displayLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelMonitorPreset">
+        <property name="text">
+         <string>Monitor Preset:</string>
+        </property>
+        <property name="buddy">
+         <cstring>monitorPreset</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1" colspan="2">
+       <widget class="QComboBox" name="monitorPreset"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelSwitchresIni">
+        <property name="text">
+         <string>Switchres INI:</string>
+        </property>
+        <property name="buddy">
+         <cstring>switchresIni</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="switchresIni">
+        <property name="placeholderText">
+         <string>Optional</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QPushButton" name="switchresIniBrowse">
+        <property name="text">
+         <string>Browse...</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="labelInterlace">
+        <property name="text">
+         <string>Interlace Mode:</string>
+        </property>
+        <property name="buddy">
+         <cstring>interlace</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1" colspan="2">
+       <widget class="QComboBox" name="interlace">
+        <!-- Rows map to the Interlace enum via INTERLACE_VALUES in the .cpp, NOT by index.
+             A third "Interlaced fields" (Field) row is intentionally omitted until per-field
+             capture is implemented - see TODO(true-fields) in GroovyMiSTerSettingsWidget.cpp. -->
+        <item>
+         <property name="text">
+          <string>Automatic - match the game (recommended)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Force progressive (480p)</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="3" column="0" colspan="3">
+       <widget class="QCheckBox" name="crtSafetyCap">
+        <property name="text">
+         <string>Enforce CRT Safety Cap</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0" colspan="3">
+       <widget class="QCheckBox" name="forceNativeUpscale">
+        <property name="text">
+         <string>Force Native (1x) Upscaling While Streaming</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="codecGroup">
+     <property name="title">
+      <string>Codec</string>
+     </property>
+     <layout class="QGridLayout" name="codecLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelCodec">
+        <property name="text">
+         <string>Codec:</string>
+        </property>
+        <property name="buddy">
+         <cstring>codec</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QComboBox" name="codec">
+        <item>
+         <property name="text">
+          <string>Raw (uncompressed)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>LZ4</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>LZ4 HC</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>NLC (near-lossless)</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelNlcPack">
+        <property name="text">
+         <string>NLC Pack:</string>
+        </property>
+        <property name="buddy">
+         <cstring>nlcPack</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QComboBox" name="nlcPack">
+        <item>
+         <property name="text">
+          <string>Tiled (works on any NLC core)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Rice (needs Rice-capable core)</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="2" column="0" colspan="2">
+       <widget class="QLabel" name="riceWarning">
+        <property name="text">
+         <string/>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="labelNlcNearLevel">
+        <property name="text">
+         <string>NLC NEAR Level:</string>
+        </property>
+        <property name="buddy">
+         <cstring>nlcNearLevel</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QSpinBox" name="nlcNearLevel">
+        <property name="minimum">
+         <number>0</number>
+        </property>
+        <property name="maximum">
+         <number>3</number>
+        </property>
+        <property name="value">
+         <number>1</number>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="labelRgbMode">
+        <property name="text">
+         <string>Pixel Format:</string>
+        </property>
+        <property name="buddy">
+         <cstring>rgbMode</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QComboBox" name="rgbMode">
+        <item>
+         <property name="text">
+          <string>RGB888 (24-bit)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>RGBA8888 (32-bit)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>RGB565 (16-bit)</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="latencyGroup">
+     <property name="title">
+      <string>Latency</string>
+     </property>
+     <layout class="QGridLayout" name="latencyLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelPacing">
+        <property name="text">
+         <string>Frame Pacing:</string>
+        </property>
+        <property name="buddy">
+         <cstring>pacing</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QComboBox" name="pacing">
+        <item>
+         <property name="text">
+          <string>PCSX2 Frame Limiter</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>MiSTer CRT Raster</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelReadback">
+        <property name="text">
+         <string>GPU Readback:</string>
+        </property>
+        <property name="buddy">
+         <cstring>readback</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QComboBox" name="readback">
+        <item>
+         <property name="text">
+          <string>Synchronous (no added frames)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Deferred (1 frame later)</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="labelHostDisplay">
+        <property name="text">
+         <string>Host Display:</string>
+        </property>
+        <property name="buddy">
+         <cstring>hostDisplay</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QComboBox" name="hostDisplay">
+        <item>
+         <property name="text">
+          <string>Parallel (show on both)</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Headless (MiSTer only)</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="audioGroup">
+     <property name="title">
+      <string>Audio</string>
+     </property>
+     <layout class="QGridLayout" name="audioLayout">
+      <item row="0" column="0">
+       <widget class="QCheckBox" name="tapAudio">
+        <property name="text">
+         <string>Mirror Audio to MiSTer</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="diagnosticsGroup">
+     <property name="title">
+      <string>Diagnostics</string>
+     </property>
+     <layout class="QGridLayout" name="diagnosticsLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelLogVerbosity">
+        <property name="text">
+         <string>Client Log Verbosity:</string>
+        </property>
+        <property name="buddy">
+         <cstring>logVerbosity</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QComboBox" name="logVerbosity">
+        <item>
+         <property name="text">
+          <string>Errors and Setup Only</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Add Frame Pacing</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Full (every frame)</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Orientation::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>0</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <tabstops>
+  <tabstop>enabled</tabstop>
+  <tabstop>host</tabstop>
+  <tabstop>mtu</tabstop>
+  <tabstop>monitorPreset</tabstop>
+  <tabstop>switchresIni</tabstop>
+  <tabstop>switchresIniBrowse</tabstop>
+  <tabstop>interlace</tabstop>
+  <tabstop>crtSafetyCap</tabstop>
+  <tabstop>forceNativeUpscale</tabstop>
+  <tabstop>codec</tabstop>
+  <tabstop>nlcPack</tabstop>
+  <tabstop>nlcNearLevel</tabstop>
+  <tabstop>rgbMode</tabstop>
+  <tabstop>pacing</tabstop>
+  <tabstop>readback</tabstop>
+  <tabstop>hostDisplay</tabstop>
+  <tabstop>tapAudio</tabstop>
+  <tabstop>logVerbosity</tabstop>
+ </tabstops>
+ <resources>
+  <include location="../resources/resources.qrc"/>
+ </resources>
+ <connections/>
+</ui>

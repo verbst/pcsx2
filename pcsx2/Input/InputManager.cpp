@@ -708,6 +708,7 @@ static std::array<const char*, static_cast<u32>(InputSourceType::Count)> s_input
 	"DInput",
 	"XInput",
 #endif
+	"MiSTer",
 }};
 
 InputSource* InputManager::GetInputSourceInterface(InputSourceType type)
@@ -736,6 +737,13 @@ bool InputManager::GetInputSourceDefaultEnabled(InputSourceType type)
 		case InputSourceType::XInput:
 			return false;
 #endif
+
+		// On by default: this is a MiSTer-focused build, so the two virtual pads should always
+		// be present and mappable without the user hunting for a toggle first. The checkbox in
+		// Controller Settings > Global still turns it off. Cheap when idle - with no MiSTer
+		// connection PollEvents() returns immediately.
+		case InputSourceType::GroovyMiSTer:
+			return true;
 
 		default:
 			return false;
@@ -1845,6 +1853,7 @@ void InputManager::UpdateInputSourceState(SettingsInterface& si, std::unique_loc
 	}
 }
 
+#include "Input/GroovyMiSTerInputSource.h"
 #include "Input/SDLInputSource.h"
 
 #ifdef _WIN32
@@ -1859,4 +1868,5 @@ void InputManager::ReloadSources(SettingsInterface& si, std::unique_lock<std::mu
 	UpdateInputSourceState<DInputSource>(si, settings_lock, InputSourceType::DInput);
 	UpdateInputSourceState<XInputSource>(si, settings_lock, InputSourceType::XInput);
 #endif
+	UpdateInputSourceState<GroovyMiSTerInputSource>(si, settings_lock, InputSourceType::GroovyMiSTer);
 }

@@ -1,0 +1,387 @@
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
+// SPDX-License-Identifier: GPL-3.0+
+
+// Deliberately does NOT include GroovyMiSTerOutput.h: that header pulls in the GS device,
+// sockets and threads. The three things worth testing here are pure logic, and keeping them
+// in their own translation units is what makes them testable at all.
+#include "GroovyMiSTer/GroovyMiSTerAudioTap.h"
+#include "GroovyMiSTer/GroovyMiSTerModeline.h"
+#include "GroovyMiSTer/GroovyMiSTerPixels.h"
+
+#include <gtest/gtest.h>
+
+#include <cstring>
+#include <utility>
+#include <vector>
+
+// =====================================================================================
+//  Pixel packing
+// =====================================================================================
+//
+// These three tests are the guard against a red/blue swap, which is the single easiest way
+// to get a subtly-wrong picture that still *looks* like it is working.
+//
+// PCSX2 reads back RGBA8 (byte 0 = R). The MiSTer's wire layout is NOT what its format
+// names suggest - the FPGA unpacks a pixel as `{r,g,b} <= word64[0 +: 24]`, a Verilog
+// concat, so blue ends up in the least-significant byte. Every mode needs a channel swap.
+
+namespace
+{
+	// One pixel of PCSX2 readback: R=0x12 G=0x34 B=0x56 A=0x78.
+	constexpr u8 kR = 0x12, kG = 0x34, kB = 0x56, kA = 0x78;
+
+	std::vector<u8> MakeRgbaSource(u32 w, u32 h, u32 pitch)
+	{
+		std::vector<u8> src(static_cast<size_t>(pitch) * h, 0);
+		for (u32 y = 0; y < h; y++)
+		{
+			u8* row = src.data() + static_cast<size_t>(y) * pitch;
+			for (u32 x = 0; x < w; x++)
+			{
+				row[x * 4 + 0] = kR;
+				row[x * 4 + 1] = kG;
+				row[x * 4 + 2] = kB;
+				row[x * 4 + 3] = kA;
+			}
+		}
+		return src;
+	}
+} // namespace
+
+TEST(GroovyMiSTerPack, Rgb888IsBgrOnTheWire)
+{
+	const u32 w = 4, h = 2, pitch = w * 4;
+	const std::vector<u8> src = MakeRgbaSource(w, h, pitch);
+
+	std::vector<u8> dst;
+	GroovyMiSTer::PackFrame(GroovyMiSTerRgbMode::RGB888, src.data(), pitch, w, h, dst);
+
+	ASSERT_EQ(dst.size(), static_cast<size_t>(w) * h * 3);
+	for (u32 i = 0; i < w * h; i++)
+	{
+		EXPECT_EQ(dst[i * 3 + 0], kB) << "byte 0 must be blue, pixel " << i;
+		EXPECT_EQ(dst[i * 3 + 1], kG) << "byte 1 must be green, pixel " << i;
+		EXPECT_EQ(dst[i * 3 + 2], kR) << "byte 2 must be red, pixel " << i;
+	}
+}
+
+TEST(GroovyMiSTerPack, Rgba8888IsBgraOnTheWire)
+{
+	const u32 w = 3, h = 3, pitch = w * 4;
+	const std::vector<u8> src = MakeRgbaSource(w, h, pitch);
+
+	std::vector<u8> dst;
+	GroovyMiSTer::PackFrame(GroovyMiSTerRgbMode::RGBA8888, src.data(), pitch, w, h, dst);
+
+	ASSERT_EQ(dst.size(), static_cast<size_t>(w) * h * 4);
+	for (u32 i = 0; i < w * h; i++)
+	{
+		EXPECT_EQ(dst[i * 4 + 0], kB);
+		EXPECT_EQ(dst[i * 4 + 1], kG);
+		EXPECT_EQ(dst[i * 4 + 2], kR);
+		EXPECT_EQ(dst[i * 4 + 3], kA);
+	}
+}
+
+TEST(GroovyMiSTerPack, Rgb565IsLittleEndianRedHigh)
+{
+	const u32 w = 2, h = 1, pitch = w * 4;
+	const std::vector<u8> src = MakeRgbaSource(w, h, pitch);
+
+	std::vector<u8> dst;
+	GroovyMiSTer::PackFrame(GroovyMiSTerRgbMode::RGB565, src.data(), pitch, w, h, dst);
+
+	ASSERT_EQ(dst.size(), static_cast<size_t>(w) * h * 2);
+
+	// (r >> 3) << 11 | (g >> 2) << 5 | (b >> 3), stored little-endian.
+	const u16 expected = static_cast<u16>(((kR >> 3) << 11) | ((kG >> 2) << 5) | (kB >> 3));
+	for (u32 i = 0; i < w * h; i++)
+	{
+		const u16 got = static_cast<u16>(dst[i * 2] | (dst[i * 2 + 1] << 8));
+		EXPECT_EQ(got, expected);
+	}
+}
+
+TEST(GroovyMiSTerPack, HonoursSourcePitchPadding)
+{
+	// Download textures are commonly padded, so the packer must not assume pitch == w * 4.
+	const u32 w = 2, h = 2;
+	const u32 pitch = w * 4 + 16; // deliberate padding
+	std::vector<u8> src(static_cast<size_t>(pitch) * h, 0xEE); // garbage in the padding
+
+	for (u32 y = 0; y < h; y++)
+	{
+		u8* row = src.data() + static_cast<size_t>(y) * pitch;
+		for (u32 x = 0; x < w; x++)
+		{
+			row[x * 4 + 0] = kR;
+			row[x * 4 + 1] = kG;
+			row[x * 4 + 2] = kB;
+			row[x * 4 + 3] = kA;
+		}
+	}
+
+	std::vector<u8> dst;
+	GroovyMiSTer::PackFrame(GroovyMiSTerRgbMode::RGB888, src.data(), pitch, w, h, dst);
+
+	ASSERT_EQ(dst.size(), static_cast<size_t>(w) * h * 3);
+	for (u32 i = 0; i < w * h; i++)
+	{
+		// If the padding leaked in we would see 0xEE here.
+		EXPECT_EQ(dst[i * 3 + 0], kB);
+		EXPECT_EQ(dst[i * 3 + 1], kG);
+		EXPECT_EQ(dst[i * 3 + 2], kR);
+	}
+}
+
+// =====================================================================================
+//  CRT safety cap
+// =====================================================================================
+//
+// This one is not merely cosmetic: a modeline far outside a CRT's designed envelope can
+// physically damage an arcade monitor. The cap is on by default and these tests exist so
+// nobody quietly widens it.
+
+namespace
+{
+	// Bytes per pixel of each wire format, spelled out so the expectations below read as the
+	// user-facing setting rather than a magic number.
+	constexpr u32 BPP_565 = 2, BPP_888 = 3, BPP_8888 = 4;
+
+	GroovyMiSTer::Modeline MakeModeline(u16 h_active, u16 v_active)
+	{
+		GroovyMiSTer::Modeline m{};
+		m.pclock = 13.5;
+		m.h_active = h_active;
+		m.h_begin = static_cast<u16>(h_active + 16);
+		m.h_end = static_cast<u16>(h_active + 48);
+		m.h_total = static_cast<u16>(h_active + 100);
+		m.v_active = v_active;
+		m.v_begin = static_cast<u16>(v_active + 3);
+		m.v_end = static_cast<u16>(v_active + 6);
+		m.v_total = static_cast<u16>(v_active + 20);
+		m.interlace = 0;
+		return m;
+	}
+} // namespace
+
+TEST(GroovyMiSTerModeline, AcceptsTypicalPs2Modes)
+{
+	// The modes PS2 games actually use on a 15kHz CRT.
+	for (const auto& [w, h] : {std::pair<u16, u16>{640, 448}, {640, 224}, {512, 448}, {640, 480}, {720, 576}})
+	{
+		const GroovyMiSTer::Modeline m = MakeModeline(w, h);
+		EXPECT_TRUE(GroovyMiSTer::IsModelineAcceptable(m, BPP_888, /*enforce_cap=*/true))
+			<< w << "x" << h << " should be accepted";
+	}
+}
+
+TEST(GroovyMiSTerModeline, CapRejectsModesBeyondCrtEnvelope)
+{
+	// 720p / 1080i class modes must be refused while the cap is on. This is the whole point.
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(MakeModeline(1280, 720), BPP_888, true));
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(MakeModeline(1920, 1080), BPP_888, true));
+
+	// v_active is the dangerous axis; one line over the limit is still over the limit.
+	EXPECT_TRUE(GroovyMiSTer::IsModelineAcceptable(MakeModeline(640, 576), BPP_888, true));
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(MakeModeline(640, 577), BPP_888, true));
+}
+
+TEST(GroovyMiSTerModeline, DisablingCapAllowsLargeModes)
+{
+	// The user can turn the cap off (behind a warning) - then modes outside the CRT envelope
+	// are permitted, as long as they still fit the client's blit buffer. 1280x480 at RGB565 is
+	// 1,228,800 bytes: well past the 1024-wide cap, just inside the budget.
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(MakeModeline(1280, 480), BPP_565, /*enforce_cap=*/true));
+	EXPECT_TRUE(GroovyMiSTer::IsModelineAcceptable(MakeModeline(1280, 480), BPP_565, /*enforce_cap=*/false));
+}
+
+TEST(GroovyMiSTerModeline, MalformedIsAlwaysRejectedEvenWithCapOff)
+{
+	// Well-formedness is NOT the user's choice: a malformed modeline would drive the FPGA's
+	// PLL into an undefined state regardless of what the display can tolerate.
+	GroovyMiSTer::Modeline zero{};
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(zero, BPP_888, false));
+
+	GroovyMiSTer::Modeline bad = MakeModeline(640, 448);
+	bad.h_total = bad.h_active; // blanking does not enclose the active area
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(bad, BPP_888, false));
+
+	GroovyMiSTer::Modeline no_clock = MakeModeline(640, 448);
+	no_clock.pclock = 0.0;
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(no_clock, BPP_888, false));
+}
+
+// =====================================================================================
+//  Blit-buffer byte budget
+// =====================================================================================
+//
+// The vendored client allocates its blit buffers once at BUFFER_SIZE (720x576x3) and takes
+// the stream length straight from our modeline - it never clamps. Overrunning that is a heap
+// overflow into RIO-registered memory, not a graphical glitch, so these tests guard the only
+// check standing in the way.
+
+TEST(GroovyMiSTerModeline, ByteBudgetTracksTheRgbMode)
+{
+	// 720x576 is a real PAL mode and the exact size the client's buffer was cut for: it fits
+	// in RGB888 with ~1KB to spare, and does not fit at all in RGBA8888.
+	const GroovyMiSTer::Modeline pal = MakeModeline(720, 576);
+
+	EXPECT_EQ(GroovyMiSTer::BlitBytes(pal, BPP_888), 1244160u);
+	EXPECT_EQ(GroovyMiSTer::BlitBytes(pal, BPP_8888), 1658880u);
+
+	EXPECT_TRUE(GroovyMiSTer::IsModelineAcceptable(pal, BPP_565, true));
+	EXPECT_TRUE(GroovyMiSTer::IsModelineAcceptable(pal, BPP_888, true));
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(pal, BPP_8888, true))
+		<< "RGBA8888 at 720x576 overruns the client's blit buffer";
+
+	// 640x576 is under the CRT cap on both axes and still does not fit in RGBA8888 - which is
+	// why the check has to be on the byte product, not on the resolution.
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(MakeModeline(640, 576), BPP_8888, true));
+}
+
+TEST(GroovyMiSTerModeline, ByteBudgetIsNotTheUsersChoice)
+{
+	// Turning the CRT cap off must not turn this off with it: the cap is about what a display
+	// tolerates, the budget is about what the client's allocation can hold.
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(MakeModeline(720, 576), BPP_8888, /*enforce_cap=*/false));
+
+	// The cap-off path is also the one that can produce genuinely huge modes.
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(MakeModeline(1920, 1080), BPP_888, /*enforce_cap=*/false));
+}
+
+TEST(GroovyMiSTerModeline, FieldBlitsCostHalf)
+{
+	// A true-field stream sends one half-height field per blit, so the same modeline that is
+	// too large as a progressive framebuffer fits when sent as fields.
+	GroovyMiSTer::Modeline fields = MakeModeline(720, 576);
+	fields.interlace = static_cast<u8>(GroovyMiSTerInterlace::Field);
+
+	EXPECT_EQ(GroovyMiSTer::BlitBytes(fields, BPP_8888), 829440u);
+	EXPECT_TRUE(GroovyMiSTer::IsModelineAcceptable(fields, BPP_8888, true));
+
+	// ProgressiveFB sends every line every blit, so it gets no discount.
+	GroovyMiSTer::Modeline progressive_fb = MakeModeline(720, 576);
+	progressive_fb.interlace = static_cast<u8>(GroovyMiSTerInterlace::ProgressiveFB);
+	EXPECT_EQ(GroovyMiSTer::BlitBytes(progressive_fb, BPP_8888), 1658880u);
+	EXPECT_FALSE(GroovyMiSTer::IsModelineAcceptable(progressive_fb, BPP_8888, true));
+}
+
+// =====================================================================================
+//  Audio tap ring
+// =====================================================================================
+
+TEST(GroovyMiSTerAudioTap, InactiveTapDiscards)
+{
+	GroovyMiSTer::AudioTap tap;
+	tap.Reset();
+
+	const float samples[4] = {0.5f, -0.5f, 0.25f, -0.25f};
+	tap.Write(samples, 2); // not active yet
+
+	u8 out[64];
+	EXPECT_EQ(tap.Read(out, sizeof(out)), 0u);
+}
+
+TEST(GroovyMiSTerAudioTap, RoundTripsStereoSamples)
+{
+	GroovyMiSTer::AudioTap tap;
+	tap.Reset();
+	tap.SetActive(true);
+
+	const float samples[4] = {1.0f, -1.0f, 0.0f, 0.5f};
+	tap.Write(samples, 2);
+
+	u8 out[16] = {};
+	const u32 n = tap.Read(out, sizeof(out));
+	ASSERT_EQ(n, 2u * GroovyMiSTer::AudioTap::BYTES_PER_SAMPLE);
+
+	s16 got[4];
+	std::memcpy(got, out, sizeof(got));
+	EXPECT_EQ(got[0], 32767);
+	EXPECT_EQ(got[1], -32767);
+	EXPECT_EQ(got[2], 0);
+	EXPECT_NEAR(got[3], 16383, 2);
+}
+
+TEST(GroovyMiSTerAudioTap, ClampsOutOfRangeInput)
+{
+	// SPU2's DC filter and volume scaling can push samples slightly past +/-1. Without a
+	// clamp these would wrap and click audibly.
+	GroovyMiSTer::AudioTap tap;
+	tap.Reset();
+	tap.SetActive(true);
+
+	const float samples[2] = {2.5f, -3.0f};
+	tap.Write(samples, 1);
+
+	u8 out[8] = {};
+	ASSERT_EQ(tap.Read(out, sizeof(out)), GroovyMiSTer::AudioTap::BYTES_PER_SAMPLE);
+
+	s16 got[2];
+	std::memcpy(got, out, sizeof(got));
+	EXPECT_EQ(got[0], 32767);
+	EXPECT_EQ(got[1], -32767);
+}
+
+TEST(GroovyMiSTerAudioTap, ReadReturnsWholeFramesOnly)
+{
+	// A half-frame read would desync the L/R interleave for everything after it.
+	GroovyMiSTer::AudioTap tap;
+	tap.Reset();
+	tap.SetActive(true);
+
+	const float samples[8] = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f};
+	tap.Write(samples, 4);
+
+	u8 out[16] = {};
+	// Ask for 6 bytes: not a multiple of the 4-byte stereo frame.
+	const u32 n = tap.Read(out, 6);
+	EXPECT_EQ(n % GroovyMiSTer::AudioTap::BYTES_PER_SAMPLE, 0u);
+	EXPECT_EQ(n, 4u);
+}
+
+TEST(GroovyMiSTerAudioTap, DropsOldestOnOverflowAndKeepsWorking)
+{
+	// Overflow must not corrupt the ring or wedge the stream - it should shed the oldest
+	// audio and carry on, so latency self-corrects after a sender stall.
+	GroovyMiSTer::AudioTap tap;
+	tap.Reset();
+	tap.SetActive(true);
+
+	const u32 frames_capacity = GroovyMiSTer::AudioTap::CAPACITY / GroovyMiSTer::AudioTap::BYTES_PER_SAMPLE;
+
+	std::vector<float> chunk(256 * 2, 0.25f);
+	for (u32 written = 0; written < frames_capacity * 2; written += 256)
+		tap.Write(chunk.data(), 256);
+
+	EXPECT_GT(tap.GetDroppedBytes(), 0u) << "overflow should have been recorded";
+
+	// The ring is still coherent and still serves whole frames.
+	std::vector<u8> out(GroovyMiSTer::AudioTap::CAPACITY);
+	const u32 n = tap.Read(out.data(), static_cast<u32>(out.size()));
+    EXPECT_GT(n, 0u);
+	EXPECT_EQ(n % GroovyMiSTer::AudioTap::BYTES_PER_SAMPLE, 0u);
+	EXPECT_LE(n, GroovyMiSTer::AudioTap::CAPACITY);
+}
+
+TEST(GroovyMiSTerAudioTap, SurvivesRingWraparound)
+{
+	GroovyMiSTer::AudioTap tap;
+	tap.Reset();
+	tap.SetActive(true);
+
+	// Push/drain repeatedly so the read and write cursors wrap the buffer several times.
+	const std::vector<float> chunk(64 * 2, 0.5f);
+	std::vector<u8> out(64 * GroovyMiSTer::AudioTap::BYTES_PER_SAMPLE);
+
+	u64 total = 0;
+	for (int i = 0; i < 10000; i++)
+	{
+		tap.Write(chunk.data(), 64);
+		total += tap.Read(out.data(), static_cast<u32>(out.size()));
+	}
+
+	EXPECT_EQ(tap.GetDroppedBytes(), 0u) << "steady-state drain should never drop";
+	EXPECT_GT(total, 0u);
+}

@@ -7,6 +7,7 @@
 #include "Settings/AchievementSettingsWidget.h"
 #include "Settings/AdvancedSettingsWidget.h"
 #include "Settings/AudioSettingsWidget.h"
+#include "Settings/GroovyMiSTerSettingsWidget.h"
 #include "Settings/BIOSSettingsWidget.h"
 #include "Settings/DEV9SettingsWidget.h"
 #include "Settings/EmulationSettingsWidget.h"
@@ -164,6 +165,17 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 	addWidget(m_audio_settings = new AudioSettingsWidget(this, m_ui.settingsContainer), tr("Audio"), QStringLiteral("volume-up-line"),
 		tr("<strong>Audio Settings</strong><hr>These options control the audio output of the console.<br><br>Mouse over an option for "
 		   "additional information, and Shift+Wheel to scroll this panel."));
+
+	// MiSTer output is machine-wide hardware setup (which MiSTer, which CRT, which network),
+	// so it is global-only - there is nothing sensible to override per game.
+	if (!isPerGameSettings())
+	{
+		addWidget(m_groovymister_settings = new GroovyMiSTerSettingsWidget(this, m_ui.settingsContainer), tr("MiSTer"),
+			QStringLiteral("tv-2-line"),
+			tr("<strong>MiSTer Settings</strong><hr>Stream the emulated picture and audio to a MiSTer FPGA, for display on a real "
+			   "CRT with very low latency. Controllers attached to the MiSTer are read back and can be bound like any other "
+			   "device.<br><br>Mouse over an option for additional information, and Shift+Wheel to scroll this panel."));
+	}
 
 	addWidget(m_memory_card_settings = new MemoryCardSettingsWidget(this, m_ui.settingsContainer), tr("Memory Cards"),
 		QStringLiteral("memcard-line"),

@@ -1693,6 +1693,100 @@ bool Pcsx2Config::SavestateOptions::operator==(const SavestateOptions& right) co
 	return OpEqu(CompressionType) && OpEqu(CompressionRatio);
 };
 
+Pcsx2Config::GroovyMiSTerOptions::GroovyMiSTerOptions()
+{
+	bitset = 0;
+
+	// Streaming is opt-in; a stock install must behave exactly as before.
+	Enabled = false;
+	TapAudio = true;
+	// Default ON: refuse modelines that could overdrive (and damage) an arcade CRT.
+	CrtSafetyCap = true;
+	ForceNativeUpscale = false;
+}
+
+void Pcsx2Config::GroovyMiSTerOptions::LoadSave(SettingsWrapper& wrap)
+{
+	SettingsWrapSection("GroovyMiSTer");
+
+	SettingsWrapBitBool(Enabled);
+	SettingsWrapBitBool(TapAudio);
+	SettingsWrapBitBool(CrtSafetyCap);
+	SettingsWrapBitBool(ForceNativeUpscale);
+
+	SettingsWrapIntEnumEx(Codec, "Codec");
+	SettingsWrapIntEnumEx(NlcPack, "NlcPack");
+	SettingsWrapIntEnumEx(Interlace, "Interlace");
+	SettingsWrapIntEnumEx(RgbMode, "RgbMode");
+	SettingsWrapIntEnumEx(Pacing, "Pacing");
+	SettingsWrapIntEnumEx(Readback, "Readback");
+	SettingsWrapIntEnumEx(HostDisplay, "HostDisplay");
+
+	// SettingsWrapper only binds int/uint/bool/float/string, so the narrow fields go through
+	// int temporaries. That is also the natural place to clamp them (see below).
+	int nlc_near_level = NlcNearLevel;
+	int mtu = Mtu;
+	int log_verbosity = LogVerbosity;
+	SettingsWrapEntryEx(nlc_near_level, "NlcNearLevel");
+	SettingsWrapEntryEx(mtu, "Mtu");
+	SettingsWrapEntryEx(log_verbosity, "LogVerbosity");
+
+	SettingsWrapEntry(Host);
+	SettingsWrapEntry(MonitorPreset);
+	SettingsWrapEntry(SwitchresIni);
+
+	// These values are handed straight to the Groovy client and ride CMD_INIT, so a
+	// hand-edited INI must not be able to put the FPGA into an undefined state.
+	// Enums are serialised as raw ints (the codec ids are non-contiguous: 0/1/3/7),
+	// so validate rather than trust.
+	switch (Codec)
+	{
+		case GroovyMiSTerCodec::Raw:
+		case GroovyMiSTerCodec::LZ4:
+		case GroovyMiSTerCodec::LZ4HC:
+		case GroovyMiSTerCodec::NLC:
+			break;
+		default:
+			Codec = GroovyMiSTerCodec::NLC;
+			break;
+	}
+
+	if (NlcPack != GroovyMiSTerNlcPack::Tiled && NlcPack != GroovyMiSTerNlcPack::Rice)
+		NlcPack = GroovyMiSTerNlcPack::Rice;
+
+	if (Interlace > GroovyMiSTerInterlace::ProgressiveFB)
+		Interlace = GroovyMiSTerInterlace::ProgressiveFB;
+
+	if (RgbMode > GroovyMiSTerRgbMode::RGB565)
+		RgbMode = GroovyMiSTerRgbMode::RGB888;
+
+	if (Pacing > GroovyMiSTerPacing::MisterMaster)
+		Pacing = GroovyMiSTerPacing::Pcsx2Master;
+
+	if (Readback > GroovyMiSTerReadback::Deferred1)
+		Readback = GroovyMiSTerReadback::Sync;
+
+	if (HostDisplay > GroovyMiSTerHostDisplay::Headless)
+		HostDisplay = GroovyMiSTerHostDisplay::Parallel;
+
+	NlcNearLevel = static_cast<u8>(std::clamp(nlc_near_level, 0, 3));
+	LogVerbosity = static_cast<u8>(std::clamp(log_verbosity, 0, 2));
+	Mtu = static_cast<u16>(std::clamp(mtu, static_cast<int>(MINIMUM_MTU), static_cast<int>(MAXIMUM_MTU)));
+}
+
+bool Pcsx2Config::GroovyMiSTerOptions::operator!=(const GroovyMiSTerOptions& right) const
+{
+	return !this->operator==(right);
+}
+
+bool Pcsx2Config::GroovyMiSTerOptions::operator==(const GroovyMiSTerOptions& right) const
+{
+	return OpEqu(bitset) && OpEqu(Codec) && OpEqu(NlcPack) && OpEqu(NlcNearLevel) &&
+	       OpEqu(Interlace) && OpEqu(RgbMode) && OpEqu(Pacing) && OpEqu(Readback) &&
+	       OpEqu(HostDisplay) && OpEqu(Mtu) && OpEqu(LogVerbosity) && OpEqu(Host) &&
+	       OpEqu(MonitorPreset) && OpEqu(SwitchresIni);
+}
+
 Pcsx2Config::FilenameOptions::FilenameOptions()
 {
 }
@@ -2014,6 +2108,7 @@ void Pcsx2Config::LoadSaveCore(SettingsWrapper& wrap)
 	Gamefixes.LoadSave(wrap);
 	Profiler.LoadSave(wrap);
 	Savestate.LoadSave(wrap);
+	GroovyMiSTer.LoadSave(wrap);
 
 	DebuggerAnalysis.LoadSave(wrap);
 	Trace.LoadSave(wrap);

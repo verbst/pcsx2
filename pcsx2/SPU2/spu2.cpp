@@ -7,6 +7,7 @@
 #include "SPU2/Dma.h"
 #include "Host/AudioStream.h"
 #include "Host.h"
+#include "GroovyMiSTer/GroovyMiSTer.h"
 #include "GS/GSCapture.h"
 #include "MTGS.h"
 #include "R3000A.h"
@@ -146,6 +147,10 @@ void SPU2::UpdateSampleRate()
 		MTGS::RunOnGSThread(&GSEndCapture);
 		MTGS::WaitGS(false, false, false);
 	}
+
+	// The MiSTer negotiates the sample rate in its CMD_INIT handshake, so a rate change
+	// (PS2 48kHz <-> PS1 44.1kHz) means the stream has to be re-established.
+	GroovyMiSTer::OnSampleRateChanged();
 }
 
 u32 SPU2::GetOutputVolume()
@@ -533,5 +538,8 @@ __forceinline void spu2Output(StereoOut32 out)
 
 		if (SPU2::IsAudioCaptureActive()) [[unlikely]]
 			GSCapture::DeliverAudioPacket(s_current_chunk.data());
+
+		if (GroovyMiSTer::IsAudioActive()) [[unlikely]]
+			GroovyMiSTer::OnAudioChunk(s_current_chunk.data(), AudioStream::CHUNK_SIZE);
 	}
 }

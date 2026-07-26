@@ -28,6 +28,7 @@ enum class InputSourceType : u32
 	DInput,
 	XInput,
 #endif
+	GroovyMiSTer, // controllers attached to a MiSTer FPGA, streamed back over the network
 	Count,
 };
 

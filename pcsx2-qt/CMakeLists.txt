@@ -63,6 +63,9 @@ target_sources(pcsx2-qt PRIVATE
 	Settings/AudioSettingsWidget.cpp
 	Settings/AudioSettingsWidget.h
 	Settings/AudioSettingsWidget.ui
+	Settings/GroovyMiSTerSettingsWidget.cpp
+	Settings/GroovyMiSTerSettingsWidget.h
+	Settings/GroovyMiSTerSettingsWidget.ui
 	Settings/AudioStretchSettingsDialog.ui
 	Settings/BIOSSettingsWidget.cpp
 	Settings/BIOSSettingsWidget.h
