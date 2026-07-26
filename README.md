@@ -1,7 +1,7 @@
-# PCSX2
+# PCSX2 w/ Groovy NLC support
 
 ## Groovy Fork Details
-This fork adds Groovy MiSTer support to PCSX2. 
+This fork integrates Groovy MiSTer into PCSX2. 
 Supports low latency video, input and audio from a PC -> MiSTer via network.
 Full UI configuration support.
 
