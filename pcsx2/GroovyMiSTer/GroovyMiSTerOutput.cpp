@@ -21,6 +21,7 @@
 #include "switchres_wrapper.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -300,6 +301,21 @@ namespace GroovyMiSTer
 			std::lock_guard<std::mutex> guard(m_status_lock);
 			m_status.connected = true;
 		}
+
+		// A fresh CMD_INIT restarts the core's own frame counter at zero, so ours has to
+		// restart with it - otherwise we blit numbers thousands ahead of a core that just
+		// began counting, which desyncs the raster servo (the client clamps the resulting
+		// sleep rather than hanging, but stays unaligned until we realign).
+		//
+		// Re-seed the epoch from the client rather than assuming a value: the gmw_close()
+		// above DESTROYS the wrapper's singleton, so the epoch it counts is per-object and
+		// restarts at 0 here, while the client's internal watchdog reconnects increment it
+		// within an object's life. It is therefore not monotonic across a session - which
+		// is why the sender loop compares it for inequality, not for growth.
+		m_blit_frame = 0;
+		m_reconnect_epoch = gmw_reconnect_epoch();
+		m_keepalive.Reset(static_cast<u64>(
+			Common::Timer::ConvertValueToMilliseconds(Common::Timer::GetCurrentValue())));
 
 		// Force the modeline to be re-sent on the new connection.
 		m_have_mode = false;
@@ -785,46 +801,68 @@ namespace GroovyMiSTer
 
 		std::vector<u8> audio_scratch(MAX_AUDIO_SEND_BYTES);
 		Common::Timer reconnect_timer;
-		bool connected = true;
+
+		// Monotonic milliseconds for the keepalive scheduler. Taken once per iteration.
+		const auto now_ms = []() -> u64 {
+			return static_cast<u64>(
+				Common::Timer::ConvertValueToMilliseconds(Common::Timer::GetCurrentValue()));
+		};
+		m_keepalive.Reset(now_ms());
+		m_reconnect_epoch = gmw_reconnect_epoch();
 
 		while (!m_quit.load(std::memory_order_acquire))
 		{
+			// Wake on a frame OR on a keepalive poll tick. The timed wait is what makes an
+			// idle session survivable: every way PCSX2 stops producing frames (pause,
+			// savestate load, disc swap, a modeline the safety gate refused) used to park
+			// this thread here indefinitely, and a session that sends nothing for the
+			// core's idle timeout - 5s by default - is closed core-side and the CRT is
+			// freed. Poll well under the send threshold; see KeepAliveScheduler.
 			OutFrame frame;
+			bool have_frame = false;
 			{
 				std::unique_lock<std::mutex> lock(m_queue_lock);
-				m_queue_cv.wait(lock, [this]() {
-					return !m_queue.empty() || m_quit.load(std::memory_order_acquire);
-				});
+				m_queue_cv.wait_for(lock, std::chrono::milliseconds(KeepAliveScheduler::POLL_PERIOD_MS),
+					[this]() {
+						return !m_queue.empty() || m_quit.load(std::memory_order_acquire);
+					});
 				if (m_quit.load(std::memory_order_acquire))
 					break;
 
-				frame = std::move(m_queue.front());
-				m_queue.pop_front();
+				if (!m_queue.empty())
+				{
+					frame = std::move(m_queue.front());
+					m_queue.pop_front();
+					have_frame = true;
+				}
 			}
-			m_space_cv.notify_one();
+			if (have_frame)
+				m_space_cv.notify_one();
 
 			if (!gmw_is_connected())
 			{
-				// Retry at a human pace, not a spin.
+				// Retry at a human pace, not a spin. This also runs on idle ticks, so a
+				// session lost while the emulator is paused comes back on its own instead
+				// of waiting for frames to resume.
 				if (reconnect_timer.GetTimeSeconds() >= 2.0)
 				{
 					reconnect_timer.Reset();
-					connected = TryConnect();
+					TryConnect();
 				}
-				if (!connected)
+				if (!gmw_is_connected())
 					continue;
 			}
 
-			// Any modeline change must land before the frame that depends on it.
+			// The client's internal watchdog may have reconnected underneath us. The core
+			// restarts its own frame counter on the fresh session, so ours has to restart
+			// too - see the note on m_blit_frame below for why only this direction needs
+			// handling.
+			const u32 epoch = gmw_reconnect_epoch();
+			if (epoch != m_reconnect_epoch)
 			{
-				std::lock_guard<std::mutex> guard(m_sr_lock);
-				if (m_switchres_pending)
-				{
-					const Modeline& m = m_pending_modeline;
-					gmw_switchres(m.pclock, m.h_active, m.h_begin, m.h_end, m.h_total,
-						m.v_active, m.v_begin, m.v_end, m.v_total, m.interlace);
-					m_switchres_pending = false;
-				}
+				m_reconnect_epoch = epoch;
+				m_blit_frame = 0;
+				Console.WriteLn(fmt::format("[MiSTer] Client reconnected (epoch {}); realigning frame counter.", epoch));
 			}
 
 			// Receive any pending ACKs from the FPGA. This is not optional: the vendored
@@ -837,7 +875,43 @@ namespace GroovyMiSTer
 			// effect of raster pacing; in Pcsx2Master nothing did, which is the bug. A
 			// non-blocking poll (0 ms) is enough - the previous frame's ACK has long since
 			// arrived by the time we loop back here at 60 Hz.
+			//
+			// Polling on IDLE ticks as well is not cosmetic. fpga.frame is the core's own
+			// GPU counter and it free-runs at the CRT's refresh rate whether or not we are
+			// blitting, so without this it would freeze at its pre-pause value: the first
+			// frame after a long pause would be numbered thousands behind where the core
+			// actually is, and discarded as stale.
 			gmw_getACK(0);
+
+			// Hold the session open if nothing has gone out lately. Deliberately evaluated
+			// on EVERY iteration rather than only on idle ticks: an iteration can carry a
+			// frame and still send nothing (the oversized-frame drop below, or a null blit
+			// buffer), and gating this on !have_frame would let that case starve the core's
+			// idle timer while looking busy. During normal play ShouldSend() is false
+			// because every blit refreshes the timestamp, so this costs one comparison.
+			const u64 tick_ms = now_ms();
+			if (m_keepalive.ShouldSend(tick_ms))
+			{
+				gmw_send_keepalive();
+				m_keepalive.NotifyWireActivity(tick_ms);
+			}
+
+			// Idle tick: holding the session is all there is to do. No switchres, no audio,
+			// no frame counter movement.
+			if (!have_frame)
+				continue;
+
+			// Any modeline change must land before the frame that depends on it.
+			{
+				std::lock_guard<std::mutex> guard(m_sr_lock);
+				if (m_switchres_pending)
+				{
+					const Modeline& m = m_pending_modeline;
+					gmw_switchres(m.pclock, m.h_active, m.h_begin, m.h_end, m.h_total,
+						m.v_active, m.v_begin, m.v_end, m.v_total, m.interlace);
+					m_switchres_pending = false;
+				}
+			}
 
 			// Audio first - the core wants it ahead of the frame it belongs to.
 			gmw_fpgaStatus status{};
@@ -854,6 +928,21 @@ namespace GroovyMiSTer
 
 			// The FPGA displays frames in counter order, so ours has to stay ahead of what
 			// it is currently showing or the frame is discarded as stale.
+			//
+			// This forward jump is deliberately UNBOUNDED, which is a considered departure
+			// from the Groovy integration handoff (§11.5, "bound that resync"). That advice
+			// predates the keepalive: now that we hold a paused session open, status.frame
+			// free-runs while we are quiet, so after a 60s pause the core is legitimately
+			// ~3600 frames ahead and clamping the jump would leave us permanently numbering
+			// behind the display position - every frame stale, forever. The failure the
+			// bound guarded against was jumping onto a DEAD session's counter, and that is
+			// no longer reachable: the vendored client's resetSessionState() zeroes fpga.*
+			// at the top of every CmdInit, so status.frame can only ever describe the
+			// session we are actually talking to.
+			//
+			// The direction that does still need handling is backwards - a reconnect
+			// restarts the core at zero while we would otherwise keep counting - and that
+			// is what the reconnectEpoch check above and TryConnect() take care of.
 			m_blit_frame = std::max(m_blit_frame + 1, status.frame + 1);
 
 			// Belt and braces. EnsureMode() already refuses any mode whose blit would not fit
@@ -885,6 +974,13 @@ namespace GroovyMiSTer
 				// vCountSync = 1: raster-chase at line 1. (The client's "auto frame delay"
 				// mode assumes a synchronous per-frame caller, which we are not.)
 				gmw_blit(m_blit_frame, frame.field, 1, 0, 0);
+
+				// Gate the keepalive on real wire activity rather than a free-running
+				// heartbeat: at 60fps this lands every ~16ms, so the idle threshold is
+				// never reached and a keepalive during normal play is structurally
+				// impossible, not merely unlikely. (Any CmdAudio above rode the same
+				// socket a few lines earlier, so one update here covers both.)
+				m_keepalive.NotifyWireActivity(now_ms());
 
 				std::lock_guard<std::mutex> guard(m_status_lock);
 				m_status.frames_sent++;

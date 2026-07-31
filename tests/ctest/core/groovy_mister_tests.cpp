@@ -2,14 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 // Deliberately does NOT include GroovyMiSTerOutput.h: that header pulls in the GS device,
-// sockets and threads. The three things worth testing here are pure logic, and keeping them
+// sockets and threads. The four things worth testing here are pure logic, and keeping them
 // in their own translation units is what makes them testable at all.
 #include "GroovyMiSTer/GroovyMiSTerAudioTap.h"
+#include "GroovyMiSTer/GroovyMiSTerKeepAlive.h"
 #include "GroovyMiSTer/GroovyMiSTerModeline.h"
 #include "GroovyMiSTer/GroovyMiSTerPixels.h"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstring>
 #include <utility>
 #include <vector>
@@ -384,4 +386,126 @@ TEST(GroovyMiSTerAudioTap, SurvivesRingWraparound)
 
 	EXPECT_EQ(tap.GetDroppedBytes(), 0u) << "steady-state drain should never drop";
 	EXPECT_GT(total, 0u);
+}
+
+// =====================================================================================
+//  Keepalive scheduling
+// =====================================================================================
+//
+// The Groovy core ends a session that puts NOTHING on the video socket for its idle
+// timeout (OSD: Server -> Idle timeout, 5s default) and frees the CRT. PCSX2 is silent
+// whenever it is alive but not blitting - paused, loading a savestate, swapping discs, or
+// holding off because no acceptable modeline could be produced - so without a keepalive,
+// pausing kills the stream.
+//
+// Two properties matter and neither is observable from the socket code, which is why the
+// decision lives in its own header:
+//
+//   1. It must NEVER fire during normal play. It is gated on the timestamp of our last
+//      outbound datagram, so at 60fps the threshold is simply never reached.
+//   2. Worst-case silence is `idle threshold + poll period`, not `idle threshold`, because
+//      a poll landing just under the threshold defers the send by a whole period. That
+//      total has to stay inside half the core's timeout so one lost datagram is survivable.
+
+TEST(GroovyMiSTerKeepAlive, NeverFiresDuringNormalPlay)
+{
+	GroovyMiSTer::KeepAliveScheduler ka;
+	ka.Reset(0);
+
+	// 60fps for 3 simulated seconds, with the scheduler polled far more often than frames
+	// arrive. Not one poll may ask for a keepalive.
+	constexpr u64 kFramePeriodMs = 16;
+	constexpr u64 kRunMs = 3000;
+	u64 next_frame = 0;
+
+	for (u64 t = 0; t <= kRunMs; t++)
+	{
+		if (t >= next_frame)
+		{
+			ka.NotifyWireActivity(t);
+			next_frame = t + kFramePeriodMs;
+		}
+		ASSERT_FALSE(ka.ShouldSend(t)) << "keepalive competed with the video stream at t=" << t;
+	}
+}
+
+TEST(GroovyMiSTerKeepAlive, FiresOnceTheThresholdIsReached)
+{
+	GroovyMiSTer::KeepAliveScheduler ka;
+	ka.Reset(0);
+
+	constexpr u64 kThreshold = GroovyMiSTer::KeepAliveScheduler::IDLE_THRESHOLD_MS;
+	EXPECT_FALSE(ka.ShouldSend(kThreshold - 1));
+	EXPECT_TRUE(ka.ShouldSend(kThreshold));
+	EXPECT_TRUE(ka.ShouldSend(kThreshold * 10));
+
+	// Sending re-arms it.
+	ka.NotifyWireActivity(kThreshold);
+	EXPECT_FALSE(ka.ShouldSend(kThreshold));
+	EXPECT_TRUE(ka.ShouldSend(kThreshold * 2));
+}
+
+TEST(GroovyMiSTerKeepAlive, WorstCaseSilenceSurvivesOneLostDatagram)
+{
+	constexpr u64 kThreshold = GroovyMiSTer::KeepAliveScheduler::IDLE_THRESHOLD_MS;
+	constexpr u64 kPoll = GroovyMiSTer::KeepAliveScheduler::POLL_PERIOD_MS;
+	// The shortest timeout the core offers. Everything below is measured against it.
+	constexpr u64 kCoreIdleTimeoutMs = 5000;
+
+	// Worst case: activity lands one tick AFTER a poll, so the poll that would have caught
+	// the threshold misses it by a hair and the send waits a whole further period.
+	u64 worst = 0;
+	for (u64 offset = 0; offset < kPoll; offset++)
+	{
+		GroovyMiSTer::KeepAliveScheduler ka;
+		const u64 activity = offset;
+		ka.Reset(activity);
+
+		// Polls happen on a fixed grid that is unaware of when activity stopped.
+		u64 sent_at = 0;
+		for (u64 t = 0; t <= kThreshold + 2 * kPoll; t += kPoll)
+		{
+			if (t >= activity && ka.ShouldSend(t))
+			{
+				sent_at = t;
+				break;
+			}
+		}
+		ASSERT_GT(sent_at, 0u) << "no keepalive was scheduled at all (offset " << offset << ")";
+		worst = std::max(worst, sent_at - activity);
+	}
+
+	EXPECT_LE(worst, kThreshold + kPoll)
+		<< "worst-case silence must be bounded by threshold + poll period";
+	EXPECT_LE(worst * 2, kCoreIdleTimeoutMs)
+		<< "losing one keepalive must still leave us inside the core's idle timeout";
+}
+
+TEST(GroovyMiSTerKeepAlive, ActivityJustUnderTheThresholdDefersAFullInterval)
+{
+	GroovyMiSTer::KeepAliveScheduler ka;
+	ka.Reset(0);
+
+	constexpr u64 kThreshold = GroovyMiSTer::KeepAliveScheduler::IDLE_THRESHOLD_MS;
+
+	// A single frame slipping out at 1900ms - a game that resumed briefly - must reset the
+	// clock, not merely delay it. This is the difference between gating on wire activity
+	// and running a free-standing heartbeat.
+	ka.NotifyWireActivity(kThreshold - 100);
+	EXPECT_FALSE(ka.ShouldSend(kThreshold));
+	EXPECT_FALSE(ka.ShouldSend(kThreshold * 2 - 101));
+	EXPECT_TRUE(ka.ShouldSend(kThreshold * 2 - 100));
+}
+
+TEST(GroovyMiSTerKeepAlive, SilenceMsIsRobustToAClockGoingBackwards)
+{
+	GroovyMiSTer::KeepAliveScheduler ka;
+	ka.Reset(10000);
+
+	// Defensive: a rewound clock must read as "fresh activity", never underflow into a
+	// gigantic age that would spray keepalives.
+	EXPECT_EQ(ka.SilenceMs(9000), 0u);
+	EXPECT_FALSE(ka.ShouldSend(9000));
+	EXPECT_EQ(ka.SilenceMs(12500), 2500u);
+	EXPECT_TRUE(ka.ShouldSend(12500));
 }

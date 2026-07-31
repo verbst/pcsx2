@@ -2292,6 +2292,9 @@
     <ClInclude Include="GroovyMiSTer\GroovyMiSTerAudioTap.h">
       <Filter>Misc\GroovyMiSTer</Filter>
     </ClInclude>
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTerKeepAlive.h">
+      <Filter>Misc\GroovyMiSTer</Filter>
+    </ClInclude>
     <ClInclude Include="GroovyMiSTer\GroovyMiSTerModeline.h">
       <Filter>Misc\GroovyMiSTer</Filter>
     </ClInclude>

@@ -275,8 +275,14 @@ std::vector<InputBindingKey> GroovyMiSTerInputSource::EnumerateMotors()
 {
 	// Inputs v2 added a rumble channel (client -> core on the inputs socket). Advertise the
 	// motors unconditionally, like the pads themselves: whether they do anything depends on
-	// runtime state (v2 session, MiSTer OSD Rumble=On, pad with motors), but the bindings
-	// are just INI strings. gmw_send_rumble() no-ops when it cannot be delivered.
+	// runtime state, but the bindings are just INI strings and gmw_send_rumble() no-ops when
+	// it cannot be delivered. MiSTer-side gating, in the order it is applied: the negotiated
+	// cap, then MiSTer.ini RUMBLE (global, default On), then the PER-PAD toggle under
+	// OSD -> System -> Controllers -> <player> -> Rumble (default On). If a user reports no
+	// vibration, check them in that order. (The redundant global OSD Rumble option that used
+	// to sit alongside these was removed upstream - it shared status bit [42] with Jumbo
+	// frames, so enabling MTU 3800 read back as Rumble = Off. On a current core the two
+	// coexist; on the older 3738621a... binary they are mutually exclusive.)
 	std::vector<InputBindingKey> ret;
 
 	InputBindingKey key = {};
@@ -313,7 +319,8 @@ void GroovyMiSTerInputSource::SendRumble(u32 index)
 
 	// The Groovy core repeats the last value until replaced, so only a change may hit the
 	// wire; the core force-stops motors on session close, and drops rumble entirely unless
-	// GMW_CAP_RUMBLE was negotiated - don't bother it (or an old core) otherwise.
+	// GMW_CAP_RUMBLE was negotiated - don't bother it (or an old core) otherwise. Note the
+	// per-pad OSD toggle also silences a running effect when switched off mid-session.
 	if (!caps_rumble)
 		return;
 

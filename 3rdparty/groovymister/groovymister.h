@@ -174,7 +174,8 @@ class GroovyMister
 	void BindInputs(const char* misterHost, uint16_t misterPort);
 	void PollInputs(void);
 	// Rumble the pad assigned to player 0/1 (strong/weak motor 0..255). Requires
-	// setInputCaps(GM_CAP_RUMBLE) before CmdInit and MiSTer OSD Rumble=On. Send on
+	// setInputCaps(GM_CAP_RUMBLE) before CmdInit; the MiSTer gates it per pad in
+	// OSD -> System -> Controllers -> <player> -> Rumble (default On). Send on
 	// state change only; a value repeats until replaced (or 0/0 to stop).
 	// No-op unless inputs are bound AND the live session negotiated GM_CAP_RUMBLE.
 	void SendRumble(uint8_t player, uint8_t strong, uint8_t weak);
@@ -184,6 +185,13 @@ class GroovyMister
 	// queues — an async RIOSend there can be silently dropped, leaving the
 	// core frozen on the last frame instead of returning to connection-search.
 	void CmdSendClose(void);
+	// Send a 1-byte CMD_GET_STATUS keepalive on the video socket (normal send
+	// path: RIO on Windows). Call at <= (idle timeout)/2 while alive but not
+	// blitting (paused / loading / in a menu) to hold the session open against
+	// the core's idle timeout (OSD: Server -> Idle timeout). Any datagram resets
+	// the core's activity timer; CMD_GET_STATUS just has no side effects. No-op
+	// unless a session is live.
+	void CmdSendKeepAlive(void);
 	// Re-send the 1-byte input subscribe on the existing inputs socket.
 	// UDP-loss insurance for threaded clients; no-op before BindInputs.
 	void ResendInputSubscribe(void);
@@ -195,6 +203,13 @@ class GroovyMister
 	// Opt-in ACK watchdog (default OFF): after 10 blits with no frameEcho
 	// advance, CmdBlit transparently reconnects — video side only, the inputs
 	// socket and its local port survive — and replays the stashed modeline.
+	// CmdInit re-zeroes fpga.* + m_frame on every (re)connect, so a stale
+	// session's counter can never leak into the raster servo, and DiffTimeRaster
+	// clamps an implausible echo/gpu spread to skip (never hang) the sync. The
+	// core restarts its own frame counter on the fresh session, so for full
+	// raster-sync recovery an integrator should realign its own blit-frame
+	// counter when reconnectEpoch() changes (a divergent counter still runs,
+	// just coarser-paced, thanks to the clamp).
 	void setAutoReconnect(uint8_t on);
 	// Monotonic count of successful auto-reconnects (host observability)
 	uint32_t reconnectEpoch(void);
@@ -321,8 +336,9 @@ class GroovyMister
 	uint64_t m_rioLastSummaryMs;     // rate-limit for the telemetry summary line
 
 	void teardownVideo(void);
+	void resetSessionState(void); // zero the per-session raster state (fpga.* + m_frame); constructor + every CmdInit
+	void rioServiceQueues(void);   // PCSX2 LOCAL PATCH: drain + telemetry, from WaitSync/CmdBlit/CmdSendKeepAlive
 	uint32_t drainSendCompletions(void);
-	void rioServiceQueues(void);   // PCSX2 LOCAL PATCH: drain + telemetry, called per frame
 	uint8_t inputsBound(void);
 	uint64_t monotonicMs(void);
 	char *AllocateBufferSpace(const DWORD bufSize, const DWORD bufCount, DWORD& totalBufferSize, DWORD& totalBufferCount);

@@ -5,6 +5,7 @@
 
 #include "Config.h"
 #include "GroovyMiSTer/GroovyMiSTerAudioTap.h"
+#include "GroovyMiSTer/GroovyMiSTerKeepAlive.h"
 #include "GroovyMiSTer/GroovyMiSTerModeline.h"
 #include "GroovyMiSTer/GroovyMiSTerPixels.h"
 
@@ -57,6 +58,15 @@ namespace GroovyMiSTer
 	///                 Close must also happen here: the Windows RIO send path defers
 	///                 sends, so a CMD_CLOSE issued from another thread is silently
 	///                 dropped and the MiSTer freezes on our last frame.
+	///                 It also owns the idle KEEPALIVE, and that placement is the whole
+	///                 trick: the core drops a session that sends nothing for its idle
+	///                 timeout (5s default), and every way PCSX2 goes quiet - pause,
+	///                 savestate load, disc swap, a refused modeline - stops the GS
+	///                 thread, not this one. Nothing can stall the sender (under
+	///                 MisterMaster the GS thread blocks on IT, never the reverse), so a
+	///                 timed wait here survives all of them. Hosts driving Groovy from a
+	///                 frame loop or a message pump have to reach for a WM_TIMER to
+	///                 escape modal dialogs; we do not.
 	///
 	///   SPU2 thread   AudioTap::Write() only.
 	///
@@ -168,7 +178,13 @@ namespace GroovyMiSTer
 		mutable std::mutex m_status_lock;
 		Status m_status;
 
+		// Sender-thread-only, no locking.
 		u32 m_blit_frame = 0;
+		// Tracks the client's internal auto-reconnect so we can realign m_blit_frame: the
+		// core restarts its own frame counter on a fresh session, and ours must follow.
+		u32 m_reconnect_epoch = 0;
+		KeepAliveScheduler m_keepalive;
+
 		AudioTap m_audio_tap;
 	};
 } // namespace GroovyMiSTer

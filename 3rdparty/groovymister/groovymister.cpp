@@ -98,6 +98,15 @@ typedef union
 #define K_CONGESTION_SIZE    500000
 #define K_CONGESTION_TIME    110000
 
+// DiffTimeRaster safety net: the echoed frame and the core's GPU frame track
+// within a frame or two in healthy play, so a raster correction is a sub-frame
+// beam-race nudge. A spread beyond this many frames means the two counters
+// belong to different sessions (a reconnect where the core restarted its counter
+// but the host kept its own) — the derived sleep would be tens of seconds and
+// WaitSync would busy-spin on it. Skip the correction instead. Matches the fbneo
+// host's field-validated GROOVY_RASTER_MAX_SPREAD.
+#define RASTER_MAX_FRAME_SPREAD 8
+
 GroovyMister::GroovyMister()
 {
 	m_verbose = 0;
@@ -105,18 +114,7 @@ GroovyMister::GroovyMister()
 	m_soundChan = 0;
 	m_rgbMode = 0;
 
-	fpga.frame = 0;
-	fpga.frameEcho = 0;
-	fpga.vCount = 0;
-	fpga.vCountEcho = 0;
-	fpga.vramEndFrame = 0;
-	fpga.vramReady = 0;
-	fpga.vramSynced = 0;
-	fpga.vgaFrameskip = 0;
-	fpga.vgaVblank = 0;
-	fpga.vgaF1 = 0;
-	fpga.audio = 0;
-	fpga.vramQueue = 0;
+	resetSessionState(); // zero fpga.* + m_frame (mirrored at the top of every CmdInit)
 
 	joyInputs.joyFrame = 0;
 	joyInputs.joyOrder = 0;
@@ -252,6 +250,32 @@ GroovyMister::~GroovyMister()
 		free(m_pBufferLZ4[i]);
 	}
 #endif
+}
+
+void GroovyMister::resetSessionState(void)
+{
+	// Per-session raster state. Zeroed here (constructor) AND at the top of every
+	// CmdInit so a reconnect can never carry a dead session's frame counters into
+	// DiffTimeRaster/WaitSync (a stale counter vs the core's fresh one produced a
+	// multi-second busy-spin), and so getACK's monotonic gate
+	// (frameUDP > fpga.frameEcho) starts permissive for the core's fresh,
+	// low-numbered session instead of rejecting all of its ACKs (which would leave
+	// the watchdog reconnect-looping forever). The full struct is cleared so no
+	// stale status bit (e.g. fpga.audio, which gates CmdAudio) leaks past the
+	// first fresh ACK.
+	fpga.frame = 0;
+	fpga.frameEcho = 0;
+	fpga.vCount = 0;
+	fpga.vCountEcho = 0;
+	fpga.vramEndFrame = 0;
+	fpga.vramReady = 0;
+	fpga.vramSynced = 0;
+	fpga.vgaFrameskip = 0;
+	fpga.vgaVblank = 0;
+	fpga.vgaF1 = 0;
+	fpga.audio = 0;
+	fpga.vramQueue = 0;
+	m_frame = 0;
 }
 
 char* GroovyMister::getPBufferBlit(uint8_t field)
@@ -394,6 +418,28 @@ void GroovyMister::CmdSendClose(void)
 	}
 }
 
+void GroovyMister::CmdSendKeepAlive(void)
+{
+	// Hold an idle session open across pauses / long loads so the core's idle
+	// timeout does not drop it. CMD_GET_STATUS is a 1-byte, no-side-effect request;
+	// any datagram on the video socket resets the core's activity timer. Uses the
+	// normal send path (RIO on Windows) like CmdClose, so keep your usual ACK
+	// draining cadence during long pauses. No-op when disconnected.
+	if (m_isConnected)
+	{
+		m_bufferSend[0] = CMD_GET_STATUS;
+		Send(&m_bufferSend[0], 1);
+
+		// PCSX2 LOCAL PATCH (pending upstream): a keepalive fires precisely when the
+		// host is NOT blitting - which is also when nothing else is draining the RIO
+		// send completion queue. Drain here so an idle session cannot accumulate
+		// completions against the BUFFER_SLICES-deep CQ (after which RIOSend, and the
+		// CQ-sharing RIOReceive re-post, fail silently). Costs one dequeue on an
+		// empty queue.
+		rioServiceQueues();
+	}
+}
+
 void GroovyMister::ResendInputSubscribe(void)
 {
 	if (!inputsBound())
@@ -489,6 +535,10 @@ void GroovyMister::setInputCaps(uint8_t caps)
 int GroovyMister::CmdInit(const char* misterHost, uint16_t misterPort, int lz4Frames, uint32_t soundRate, uint8_t soundChan, uint8_t rgbMode, uint16_t mtu)
 {
 	m_isConnected = 0;
+	// Clear stale per-session raster state before the version-probe/init ACKs, so
+	// a reconnect starts the raster servo and getACK's ACK gate from a clean slate
+	// (see resetSessionState). On the initial connect this repeats the constructor.
+	resetSessionState();
 	m_mtu = (!mtu) ? BUFFER_MTU : mtu - MTU_HEADER;
 
 	// Set server
@@ -1309,9 +1359,9 @@ void GroovyMister::WaitSync(void)
 // This used to sit inline at the end of WaitSync(). An integration that paces
 // itself never calls WaitSync, so it never drained the send queue and never saw
 // the telemetry either — the one path that could have shown the problem was in
-// the branch that did not have it. Called from WaitSync() and CmdBlit() so it
-// runs once per frame under any pacing model. Draining an already-empty queue
-// dequeues nothing, so the second call in a WaitSync-driven client is free.
+// the branch that did not have it. Called from WaitSync(), CmdBlit() and
+// CmdSendKeepAlive() so it runs under any pacing model, blitting or idle.
+// Draining an already-empty queue dequeues nothing, so the extra calls are free.
 void GroovyMister::rioServiceQueues(void)
 {
 #ifdef _WIN32
@@ -1350,6 +1400,20 @@ int GroovyMister::DiffTimeRaster(void)
 			fpga.frameEcho = fpga.frame + 1;
 		}*/
 		LOG(2,"[MiSTer] echo %d %d / %d %d \n", fpga.frameEcho, fpga.vCountEcho, fpga.frame, fpga.vCount);
+
+		// Reconnect desync guard: bail before the multiply (also avoids the int
+		// overflow a huge spread would hit in m_widthTime * dif). Returning 0
+		// skips this frame's raster nudge — WaitSync then falls back to its
+		// coarse frameTime pace, which is one un-aligned frame instead of a
+		// multi-second hang.
+		int64_t spread = (int64_t) fpga.frameEcho - (int64_t) fpga.frame;
+		if (spread < 0) spread = -spread;
+		if (spread > RASTER_MAX_FRAME_SPREAD)
+		{
+			LOG(2,"[MiSTer] raster spread %lld frames (echo %u vs gpu %u) - skipping sync (reconnect desync?)\n", (long long) spread, fpga.frameEcho, fpga.frame);
+			return 0;
+		}
+
 		uint32_t vCount1 = ((fpga.frameEcho - 1) * m_vTotal + fpga.vCountEcho) >> m_interlace;
 		uint32_t vCount2 = (fpga.frame * m_vTotal + fpga.vCount) >> m_interlace;
 		int dif = (int) (vCount1 - vCount2) / 2; //dicotomic
