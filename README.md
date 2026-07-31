@@ -1,4 +1,18 @@
-# PCSX2
+# PCSX2 w/ Groovy NLC support
+
+## Groovy Fork Details
+This fork integrates Groovy MiSTer into PCSX2. 
+Supports low latency video, input and audio from a PC -> MiSTer via network.
+Full UI configuration support.
+
+It is highly recommended to use Groovy w/NLC support (https://github.com/verbst/Groovy_MiSTer). It is untested on older Groovy versions.
+
+
+<img width="811" height="477" alt="(1)" src="https://github.com/user-attachments/assets/77ca437e-a57b-44c3-b5c8-a37d92d8d96d" />
+<img width="904" height="831" alt="(2)" src="https://github.com/user-attachments/assets/db4d6800-f828-4c50-876d-8dc755cef000" />
+<img width="1319" height="726" alt="(3)" src="https://github.com/user-attachments/assets/7748a3f5-7068-4bce-870e-c24f03a81383" />
+
+
 
 ![Windows Build Status](https://img.shields.io/github/actions/workflow/status/PCSX2/pcsx2/windows_build_matrix.yml?label=%F0%9F%96%A5%EF%B8%8F%20Windows%20Builds)
 ![Linux Build Status](https://img.shields.io/github/actions/workflow/status/PCSX2/pcsx2/linux_build_matrix.yml?label=%F0%9F%90%A7%20Linux%20Builds)
