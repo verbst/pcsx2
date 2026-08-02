@@ -877,11 +877,11 @@ int GroovyMister::CmdInit(const char* misterHost, uint16_t misterPort, int lz4Fr
 
 }
 
-void GroovyMister::CmdSwitchres(double pClock, uint16_t hActive, uint16_t hBegin, uint16_t hEnd, uint16_t hTotal, uint16_t vActive, uint16_t vBegin, uint16_t vEnd, uint16_t vTotal, uint8_t interlace)
+int GroovyMister::CmdSwitchres(double pClock, uint16_t hActive, uint16_t hBegin, uint16_t hEnd, uint16_t hTotal, uint16_t vActive, uint16_t vBegin, uint16_t vEnd, uint16_t vTotal, uint8_t interlace)
 {
 	if (!m_isConnected)
-	  return;
-	  
+	  return -1;
+
 	uint8_t interlace_modeline = (interlace != 2) ? interlace : 1;
 
 	m_RGBSize = (m_rgbMode == 1) ? (hActive * vActive) << 2 : (m_rgbMode == 2) ? (hActive * vActive) << 1 : hActive * vActive * 3;
@@ -912,7 +912,30 @@ void GroovyMister::CmdSwitchres(double pClock, uint16_t hActive, uint16_t hBegin
 	memcpy(&m_bufferSend[23],&vTotal,sizeof(vTotal));
 	memcpy(&m_bufferSend[25],&interlace,sizeof(interlace));
 
-	Send(&m_bufferSend[0], 26);
+	// Unlike every other state-critical command (CmdInit, CmdBlit/ACK, CmdGetStatus), this
+	// send used to be pure fire-and-forget: no ACK, no retry, no return value. On the
+	// reconnect path (setAutoReconnect's watchdog) this lands immediately after CmdInit's own
+	// send with no natural gap between them, and was found to be lost 100% of the time on
+	// reconnect (never on the initial connect, where unrelated app startup work happens to
+	// separate the two sends by a few hundred ms). A lost switchres left the core's
+	// PoC_bytes_len at 0 forever — setInit()'s calloc zeroes it on every CmdInit, and only a
+	// successfully-processed CmdSwitchres restores it — silently discarding all incoming video
+	// data for the rest of the session with no way to recover short of a full reconnect.
+	// Retry like CmdInit already does (same getACK(60) pattern, same ACK the core already
+	// sends back for CMD_INIT/CMD_GET_STATUS).
+	const int SWITCHRES_ATTEMPTS = 3;
+	uint32_t ackTime = 0;
+	for (int attempt = 0; attempt < SWITCHRES_ATTEMPTS && !ackTime; attempt++)
+	{
+		Send(&m_bufferSend[0], 26);
+		ackTime = getACK(60);
+	}
+
+	if (!ackTime)
+	{
+		LOG(0, "[MiSTer] CmdSwitchres ACK failed after %d attempts\n", SWITCHRES_ATTEMPTS);
+		return -1;
+	}
 
 	// stash the modeline so the setAutoReconnect watchdog can replay it after
 	// an internal reconnect (the caller never has to detect the reconnect)
@@ -927,6 +950,7 @@ void GroovyMister::CmdSwitchres(double pClock, uint16_t hActive, uint16_t hBegin
 	m_initVEnd      = vEnd;
 	m_initVTotal    = vTotal;
 	m_initInterlace = interlace;
+	return 0;
 }
 
 void GroovyMister::CmdBlit(uint32_t frame, uint8_t field, uint16_t vCountSync, uint32_t margin, uint32_t matchDeltaBytes)
@@ -990,12 +1014,20 @@ void GroovyMister::CmdBlit(uint32_t frame, uint8_t field, uint16_t vCountSync, u
 				if (rc == 0)
 				{
 					ResendInputSubscribe();
+					bool switchresReplayed = false;
 					if (m_switchresValid)
 					{
-						CmdSwitchres(m_initPClock, m_initHActive, m_initHBegin, m_initHEnd, m_initHTotal, m_initVActive, m_initVBegin, m_initVEnd, m_initVTotal, m_initInterlace);
+						int switchresRc = CmdSwitchres(m_initPClock, m_initHActive, m_initHBegin, m_initHEnd, m_initHTotal, m_initVActive, m_initVBegin, m_initVEnd, m_initVTotal, m_initInterlace);
+						switchresReplayed = (switchresRc == 0);
+						if (!switchresReplayed)
+						{
+							// CmdSwitchres already retried internally and logged the ACK failure;
+							// PoC_bytes_len stays 0 on the core until a future reconnect gets it through
+							LOG(0,"[MiSTer] WARNING: modeline replay failed on reconnect — video will stay blank/corrupt until it succeeds\n");
+						}
 					}
 					m_reconnectEpoch++;
-					LOG(0,"[MiSTer] Reconnect OK (epoch %u)%s\n", m_reconnectEpoch, m_switchresValid ? ", modeline replayed" : "");
+					LOG(0,"[MiSTer] Reconnect OK (epoch %u)%s\n", m_reconnectEpoch, switchresReplayed ? ", modeline replayed" : "");
 				}
 				else
 				{

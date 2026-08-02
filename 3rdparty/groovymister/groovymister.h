@@ -158,8 +158,9 @@ class GroovyMister
 	void setNlcPack(uint8_t pack);       // R0/R5: NLC entropy front-end: 1=TILED (default), 2=RICE (CMD_INIT byte[1] bit 7)
 	void setNearLevel(uint8_t lvl);      // NLC near-lossless level 0-3 (0=lossless default; CMD_INIT byte[1] bits [3:2])
 	void setInputCaps(uint8_t caps);     // GM_CAP_* input capabilities — set before CmdInit (0 = legacy v1 inputs)
-	// Change resolution (check https://github.com/antonioginer/switchres) with modeline
-	void CmdSwitchres(double pClock, uint16_t hActive, uint16_t hBegin, uint16_t hEnd, uint16_t hTotal, uint16_t vActive, uint16_t vBegin, uint16_t vEnd, uint16_t vTotal, uint8_t interlace);
+	// Change resolution (check https://github.com/antonioginer/switchres) with modeline.
+	// Returns 0 on success (ACK'd), -1 if not connected or the ACK never arrived after retrying.
+	int CmdSwitchres(double pClock, uint16_t hActive, uint16_t hBegin, uint16_t hEnd, uint16_t hTotal, uint16_t vActive, uint16_t vBegin, uint16_t vEnd, uint16_t vTotal, uint8_t interlace);
 	// Stream frame, field = 0 for progressive, vCountSync = 0 for auto frame delay or number of vertical line to sync with, margin with nanoseconds for auto frame delay)
 	void CmdBlit(uint32_t frame, uint8_t field, uint16_t vCountSync, uint32_t margin, uint32_t matchDeltaBytes);
 	// Stream audio

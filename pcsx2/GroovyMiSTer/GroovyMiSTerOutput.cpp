@@ -907,8 +907,15 @@ namespace GroovyMiSTer
 				if (m_switchres_pending)
 				{
 					const Modeline& m = m_pending_modeline;
-					gmw_switchres(m.pclock, m.h_active, m.h_begin, m.h_end, m.h_total,
-						m.v_active, m.v_begin, m.v_end, m.v_total, m.interlace);
+					if (gmw_switchres(m.pclock, m.h_active, m.h_begin, m.h_end, m.h_total,
+							m.v_active, m.v_begin, m.v_end, m.v_total, m.interlace) < 0)
+					{
+						// Already retried internally; the connection is likely dead right now.
+						// The gmw_is_connected()/TryConnect() loop above will catch that, and the
+						// client's own auto-reconnect watchdog replays the last-stashed modeline
+						// once it reconnects.
+						Console.Warning("[MiSTer] Switchres ACK failed; video may stay blank until the next reconnect.");
+					}
 					m_switchres_pending = false;
 				}
 			}

@@ -196,7 +196,8 @@ MODULE_API_GMW uint8_t gmw_is_connected(void);
 // own modeline state can watch this to know a reconnect happened.
 MODULE_API_GMW uint32_t gmw_reconnect_epoch(void);
 // Change resolution (check https://github.com/antonioginer/switchres) for modeline generation (interlace=2 for progressive framebuffer)
-MODULE_API_GMW void gmw_switchres(double pClock, uint16_t hActive, uint16_t hBegin, uint16_t hEnd, uint16_t hTotal, uint16_t vActive, uint16_t vBegin, uint16_t vEnd, uint16_t vTotal, uint8_t interlace);
+// Returns 0 on success (ACK'd), -1 if not connected or the ACK never arrived after retrying.
+MODULE_API_GMW int gmw_switchres(double pClock, uint16_t hActive, uint16_t hBegin, uint16_t hEnd, uint16_t hTotal, uint16_t vActive, uint16_t vBegin, uint16_t vEnd, uint16_t vTotal, uint8_t interlace);
 // This buffer are registered and aligned for sending rgb. Populate it before gmw_blit
 MODULE_API_GMW char* gmw_get_pBufferBlit(uint8_t field);
 // This buffer are registered and aligned for sending rgb. Populate it before gmw_blit. Here will be difference between actual frame and last with 8-bit overflow
