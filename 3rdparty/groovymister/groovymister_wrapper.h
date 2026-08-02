@@ -185,6 +185,9 @@ MODULE_API_GMW void gmw_close(void);
 // threads that no longer drain the RIO queues. Safe to call repeatedly and
 // before gmw_close.
 MODULE_API_GMW void gmw_send_close(void);
+// Send a 1-byte CMD_GET_STATUS keepalive on the video socket to hold an idle
+// session against the core's idle timeout. Call while alive but not blitting.
+MODULE_API_GMW void gmw_send_keepalive(void);
 // 1 if the shared connection (from gmw_init) is live. Pad code should check
 // this before touching the input socket so it never creates a second client.
 MODULE_API_GMW uint8_t gmw_is_connected(void);
@@ -193,7 +196,8 @@ MODULE_API_GMW uint8_t gmw_is_connected(void);
 // own modeline state can watch this to know a reconnect happened.
 MODULE_API_GMW uint32_t gmw_reconnect_epoch(void);
 // Change resolution (check https://github.com/antonioginer/switchres) for modeline generation (interlace=2 for progressive framebuffer)
-MODULE_API_GMW void gmw_switchres(double pClock, uint16_t hActive, uint16_t hBegin, uint16_t hEnd, uint16_t hTotal, uint16_t vActive, uint16_t vBegin, uint16_t vEnd, uint16_t vTotal, uint8_t interlace);
+// Returns 0 on success (ACK'd), -1 if not connected or the ACK never arrived after retrying.
+MODULE_API_GMW int gmw_switchres(double pClock, uint16_t hActive, uint16_t hBegin, uint16_t hEnd, uint16_t hTotal, uint16_t vActive, uint16_t vBegin, uint16_t vEnd, uint16_t vTotal, uint8_t interlace);
 // This buffer are registered and aligned for sending rgb. Populate it before gmw_blit
 MODULE_API_GMW char* gmw_get_pBufferBlit(uint8_t field);
 // This buffer are registered and aligned for sending rgb. Populate it before gmw_blit. Here will be difference between actual frame and last with 8-bit overflow
@@ -230,7 +234,8 @@ MODULE_API_GMW void gmw_set_input_caps(uint8_t caps);
 // was requested.
 MODULE_API_GMW uint8_t gmw_get_input_caps(void);
 // Rumble player 0/1's pad (strong/weak motor 0..255). Requires GMW_CAP_RUMBLE
-// negotiated and MiSTer OSD Rumble=On; the core force-stops motors on session
+// negotiated; the MiSTer gates it per pad in OSD -> System -> Controllers ->
+// <player> -> Rumble (default On), and force-stops motors on session
 // close. Send on STATE CHANGE only — the core repeats the last value until
 // replaced (0/0 stops). Internally guarded: no-op when not connected, inputs
 // not bound, or rumble not negotiated.
@@ -312,6 +317,7 @@ typedef struct MODULE_API_GMW
 	void (*set_nlc_pack)(uint8_t pack);
 	void (*set_nlc_disp_mode)(uint8_t mode);
 	void (*set_auto_reconnect)(uint8_t on);
+	void (*send_keepalive)(void);   /* appended only — existing offsets unchanged */
 } gmwAPI;
 
 

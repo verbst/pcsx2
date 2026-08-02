@@ -729,6 +729,7 @@
     <ClInclude Include="Input\DInputSource.h" />
     <ClInclude Include="GroovyMiSTer\GroovyMiSTer.h" />
     <ClInclude Include="GroovyMiSTer\GroovyMiSTerAudioTap.h" />
+    <ClInclude Include="GroovyMiSTer\GroovyMiSTerKeepAlive.h" />
     <ClInclude Include="GroovyMiSTer\GroovyMiSTerModeline.h" />
     <ClInclude Include="GroovyMiSTer\GroovyMiSTerOutput.h" />
     <ClInclude Include="GroovyMiSTer\GroovyMiSTerPixels.h" />

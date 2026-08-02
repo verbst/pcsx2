@@ -1105,6 +1105,7 @@ set(pcsx2GroovyMiSTerSources
 set(pcsx2GroovyMiSTerHeaders
 	GroovyMiSTer/GroovyMiSTer.h
 	GroovyMiSTer/GroovyMiSTerAudioTap.h
+	GroovyMiSTer/GroovyMiSTerKeepAlive.h
 	GroovyMiSTer/GroovyMiSTerModeline.h
 	GroovyMiSTer/GroovyMiSTerOutput.h
 	GroovyMiSTer/GroovyMiSTerPixels.h

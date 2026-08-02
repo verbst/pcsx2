@@ -64,6 +64,16 @@ MODULE_API_GMW void gmw_send_close(void)
 	}
 }
 
+// Send a 1-byte CMD_GET_STATUS keepalive to hold an idle session against the
+// core's idle timeout. Call while alive but not blitting (paused/loading/menu).
+MODULE_API_GMW void gmw_send_keepalive(void)
+{
+	if (gmw != NULL)
+	{
+		gmw->CmdSendKeepAlive();
+	}
+}
+
 MODULE_API_GMW uint8_t gmw_is_connected(void)
 {
 	return (gmw != NULL) ? gmw->isConnected() : 0;
@@ -74,15 +84,16 @@ MODULE_API_GMW uint32_t gmw_reconnect_epoch(void)
 	return (gmw != NULL) ? gmw->reconnectEpoch() : 0;
 }
 
-MODULE_API_GMW void gmw_switchres(double pClock, uint16_t hActive, uint16_t hBegin, uint16_t hEnd, uint16_t hTotal, uint16_t vActive, uint16_t vBegin, uint16_t vEnd, uint16_t vTotal, uint8_t interlace)
+MODULE_API_GMW int gmw_switchres(double pClock, uint16_t hActive, uint16_t hBegin, uint16_t hEnd, uint16_t hTotal, uint16_t vActive, uint16_t vBegin, uint16_t vEnd, uint16_t vTotal, uint8_t interlace)
 {
 	if (gmw != NULL)
 	{
-		gmw->CmdSwitchres(pClock, hActive, hBegin, hEnd, hTotal, vActive, vBegin, vEnd, vTotal, interlace);
+		return gmw->CmdSwitchres(pClock, hActive, hBegin, hEnd, hTotal, vActive, vBegin, vEnd, vTotal, interlace);
 	}
 	else
 	{
 		printf("[MiSTer] gmw_switchres failed\n");
+		return -1;
 	}
 }
 
